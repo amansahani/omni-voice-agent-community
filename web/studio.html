@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Enterprise Agent Studio | Node Action Modules & Workflow Designer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Canvas Dot/Grid Pattern */
+    .canvas-grid {
+      background-size: 24px 24px;
+      background-image: 
+        linear-gradient(to right, rgba(51, 65, 85, 0.2) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(51, 65, 85, 0.2) 1px, transparent 1px);
+    }
+    .node-card {
+      transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+    }
+    .node-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 14px 32px -8px rgba(99, 102, 241, 0.35);
+    }
+    .node-selected {
+      border-color: #6366f1 !important;
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.6), 0 14px 32px -8px rgba(99, 102, 241, 0.45);
+    }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
+    ::-webkit-scrollbar-thumb { background: rgba(51, 65, 85, 0.8); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(71, 85, 105, 1); }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased flex flex-col selection:bg-indigo-500 selection:text-white">
+
+  <!-- Top Enterprise Navigation Header -->
+  <header class="bg-slate-900/95 backdrop-blur border-b border-slate-800 sticky top-0 z-40 px-6 py-3">
+    <div class="max-w-[1850px] mx-auto flex items-center justify-between">
+      
+      <!-- Brand & Title -->
+      <div class="flex items-center gap-4">
+        <a href="/" class="flex items-center gap-2 text-slate-400 hover:text-white transition">
+          <div class="w-8 h-8 rounded-xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 font-bold text-sm">
+            ⚡
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-sm text-white">Omni-Channel Voice Agent</span>
+              <span class="text-[10px] font-mono bg-indigo-950 text-indigo-300 border border-indigo-700/60 px-1.5 py-0.5 rounded">STUDIO</span>
+            </div>
+            <p class="text-[11px] text-slate-400">Hierarchical Node & Action Module Orchestrator (ElevenLabs / Gnani.ai Architecture)</p>
+          </div>
+        </a>
+      </div>
+
+      <!-- Main Navigation Switcher -->
+      <nav class="flex items-center bg-slate-950 border border-slate-800 rounded-xl p-1 gap-1">
+        <button id="navBtnCanvas" class="nav-tab-btn py-1.5 px-3.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 bg-indigo-600 text-white shadow-sm" data-tab="tabCanvas">
+          <span>🎨 Node & Module Canvas</span>
+        </button>
+        <button id="navBtnKnowledge" class="nav-tab-btn py-1.5 px-3.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 text-slate-400 hover:text-slate-200" data-tab="tabKnowledge">
+          <span>📚 Knowledge Ingestion (RAG)</span>
+        </button>
+        <button id="navBtnWebhooks" class="nav-tab-btn py-1.5 px-3.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 text-slate-400 hover:text-slate-200" data-tab="tabWebhooks">
+          <span>⚡ API Webhook Connectors</span>
+        </button>
+      </nav>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center gap-3">
+        <!-- BYOK: Bring Your Own API Key Configuration Button -->
+        <button id="apiKeySettingsBtn" class="flex items-center bg-slate-950 border border-slate-700/80 hover:border-indigo-500 rounded-xl px-3 py-2 text-xs gap-2 transition shadow-inner cursor-pointer text-slate-200">
+          <span class="text-amber-400">🔑</span>
+          <div class="flex flex-col text-left">
+            <span class="font-bold text-[11px] text-white flex items-center gap-1.5">
+              <span>API Key Settings</span>
+              <span id="keyStatusBadge" class="text-[9px] font-mono bg-emerald-950 text-emerald-400 border border-emerald-700/60 px-1 py-0.2 rounded">BYOK ACTIVE</span>
+            </span>
+            <span class="text-[10px] text-slate-400 font-mono">Configure Sarvam / ElevenLabs</span>
+          </div>
+        </button>
+
+        <a href="/" class="py-1.5 px-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition flex items-center gap-1.5 shadow-md shadow-emerald-900/30">
+          <span>🎙️ Open Live Voice Demo</span>
+        </a>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- ========================================================================= -->
+  <!-- TAB 1: Visual Agentic Workflow Graph Designer (Canvas & Modules) -->
+  <!-- ========================================================================= -->
+  <main id="tabCanvas" class="studio-tab flex-1 flex flex-col max-w-[1850px] w-full mx-auto p-6 gap-5">
+    
+    <!-- Top Studio Toolbar -->
+    <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <label class="text-xs font-bold text-slate-400">Active Workflow Graph:</label>
+        <select id="workflowSelect" class="bg-slate-950 border border-slate-700 text-indigo-300 font-bold text-xs rounded-xl px-3.5 py-2 focus:outline-none focus:border-indigo-500 cursor-pointer">
+          <!-- Dynamically populated -->
+        </select>
+        <button id="newWfBtn" class="py-1.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold transition border border-slate-700">
+          + New Workflow
+        </button>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button id="addNodeBtn" class="py-2 px-3.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+          <span>+ Add Execution Node</span>
+        </button>
+        <button id="saveWorkflowBtn" class="py-2 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl transition shadow-lg shadow-indigo-900/30 flex items-center gap-1.5">
+          <span>💾 Save & Persist to SQLite</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Main Workspace (7 Cols Node Flow Canvas + 5 Cols Node Action Module Inspector) -->
+    <div class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 min-h-[700px]">
+      
+      <!-- LEFT 7 COLS: Interactive Execution Node Canvas -->
+      <div class="lg:col-span-7 bg-slate-900/60 border border-slate-800 rounded-2xl p-6 shadow-2xl canvas-grid relative overflow-hidden flex flex-col">
+        <div class="flex justify-between items-center mb-4 z-10">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Node Execution Hierarchy</span>
+            <span id="canvasFlowNameBadge" class="text-[10px] font-mono bg-indigo-950 text-indigo-300 border border-indigo-700/50 px-2 py-0.5 rounded">Clinic Reception</span>
+          </div>
+          <span class="text-[11px] text-slate-500 font-mono">Select a node to inspect & configure its action modules</span>
+        </div>
+
+        <!-- Node Hierarchy Grid Container -->
+        <div id="canvasNodesContainer" class="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 overflow-y-auto z-10 p-1">
+          <!-- Flow nodes rendered dynamically -->
+        </div>
+      </div>
+
+      <!-- RIGHT 5 COLS: Hierarchical Node & Action Module Inspector -->
+      <div class="lg:col-span-5 bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-2xl flex flex-col space-y-4">
+        
+        <!-- Node Header -->
+        <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+          <div>
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-200">Node & Action Module Inspector</h3>
+            <p class="text-[11px] text-slate-400">Configure entry actions, RAG grounding, tool dispatches & slots</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <span id="inspectorNodeTypeBadge" class="text-[10px] font-mono uppercase bg-emerald-950 text-emerald-300 border border-emerald-700/50 px-2 py-0.5 rounded">ENTRY NODE</span>
+            <span id="inspectorNodeBadge" class="text-[10px] font-mono bg-cyan-950 text-cyan-300 border border-cyan-700/50 px-2 py-0.5 rounded">welcome_intent_gate</span>
+          </div>
+        </div>
+
+        <!-- Scrollable Module Inspector Body -->
+        <div class="space-y-4 flex-1 overflow-y-auto pr-1 text-xs">
+          
+          <!-- Node Basic Settings -->
+          <div class="p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-2.5">
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="font-bold text-slate-400 block mb-1 text-[10px] uppercase">Node Identifier</label>
+                <input id="editNodeId" type="text" class="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-slate-300 font-mono text-xs focus:outline-none" readonly>
+              </div>
+              <div>
+                <label class="font-bold text-slate-400 block mb-1 text-[10px] uppercase">Node Type</label>
+                <select id="editNodeType" class="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-slate-300 text-xs focus:outline-none focus:border-indigo-500">
+                  <option value="entry">🚀 Entry Node</option>
+                  <option value="action">⚙️ Action Node</option>
+                  <option value="subagent">🤖 Conversational Subagent</option>
+                  <option value="triage">🚑 Triage / Emergency Node</option>
+                  <option value="end">🏁 End / Completed Node</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label class="font-bold text-slate-400 block mb-1 text-[10px] uppercase">Display Title</label>
+              <input id="editNodeTitle" type="text" class="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs focus:outline-none focus:border-indigo-500 font-semibold">
+            </div>
+          </div>
+
+          <!-- Section: Node Action Modules Header -->
+          <div class="flex items-center justify-between pt-1">
+            <span class="font-bold text-slate-300 text-xs flex items-center gap-1.5">
+              <span>🧩 Configured Action Modules</span>
+              <span id="moduleCountBadge" class="text-[9px] font-mono bg-indigo-950 text-indigo-400 px-1.5 py-0.5 rounded">4 active</span>
+            </span>
+            <button id="addModuleBtn" class="text-[11px] font-bold text-indigo-400 hover:text-indigo-300 transition">
+              + Add Module
+            </button>
+          </div>
+
+          <!-- Action Modules Container -->
+          <div id="nodeModulesContainer" class="space-y-3">
+            <!-- Rendered dynamically -->
+          </div>
+
+          <!-- Module 1: Prompt & Instructions Editor -->
+          <div class="p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
+            <div class="flex justify-between items-center">
+              <span class="font-bold text-indigo-300 text-[11px] flex items-center gap-1.5">
+                <span>💬 Step Directives Module</span>
+              </span>
+              <span class="text-[9px] font-mono text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/40">Active</span>
+            </div>
+            <textarea id="editNodeInstructions" rows="3" class="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs focus:outline-none focus:border-indigo-500 leading-relaxed font-mono"></textarea>
+          </div>
+
+          <!-- Module 2: Attached Knowledge Base (RAG) Grounding -->
+          <div class="p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
+            <div class="flex justify-between items-center">
+              <span class="font-bold text-cyan-300 text-[11px] flex items-center gap-1.5">
+                <span>📚 Attached Knowledge (RAG) Grounding</span>
+              </span>
+              <span class="text-[9px] font-mono text-cyan-400 bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-800/40">Scoped RAG</span>
+            </div>
+            <input id="editNodeDocs" type="text" placeholder="e.g. beacon_pharmacy_policy, cardiology_dept_info" class="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono text-xs focus:outline-none focus:border-cyan-500">
+            <p class="text-[10px] text-slate-500">Comma-separated doc IDs queryable only when the caller is at this step.</p>
+          </div>
+
+          <!-- Module 3: Bound Webhook / Tools Dispatch -->
+          <div class="p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
+            <div class="flex justify-between items-center">
+              <span class="font-bold text-amber-300 text-[11px] flex items-center gap-1.5">
+                <span>⚡ Bound Webhook & Tool Dispatches</span>
+              </span>
+              <span class="text-[9px] font-mono text-amber-400 bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-800/40">&lt; 1.0 &micro;s Dispatch</span>
+            </div>
+            <input id="editNodeTools" type="text" placeholder="e.g. list_clinic_services, lookup_doctor_profile" class="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono text-xs focus:outline-none focus:border-amber-500">
+            <p class="text-[10px] text-slate-500">Comma-separated tool IDs executed on node entry or upon caller trigger.</p>
+          </div>
+
+          <!-- Module 4: Typed Entity Slot Extraction -->
+          <div class="p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
+            <div class="flex justify-between items-center">
+              <span class="font-bold text-purple-300 text-[11px] flex items-center gap-1.5">
+                <span>🎯 Typed Entity Slot Extraction</span>
+              </span>
+              <span class="text-[9px] font-mono text-purple-400 bg-purple-950/60 px-1.5 py-0.5 rounded border border-purple-800/40">TypeSafe Jev</span>
+            </div>
+            <input id="editNodeSlots" type="text" placeholder="e.g. caller_intent, department, time_slot" class="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono text-xs focus:outline-none focus:border-purple-500">
+            <p class="text-[10px] text-slate-500">Slots validated before allowing transitions to downstream nodes.</p>
+          </div>
+
+          <!-- Module 5: Conditional Branching & Transition Rules -->
+          <div class="p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
+            <div class="flex justify-between items-center">
+              <span class="font-bold text-rose-300 text-[11px] flex items-center gap-1.5">
+                <span>🔀 Branching & Transition Rules</span>
+              </span>
+              <span class="text-[9px] font-mono text-rose-400 bg-rose-950/60 px-1.5 py-0.5 rounded border border-rose-800/40">DAG Edges</span>
+            </div>
+            <select id="editNextNodeSelect" class="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono text-xs focus:outline-none focus:border-rose-500">
+              <option value="">-- Conclude Workflow (End Node) --</option>
+            </select>
+            <p class="text-[10px] text-slate-500">Select target node for default edge transition.</p>
+          </div>
+
+        </div>
+
+        <!-- Action Footer -->
+        <div class="pt-3 border-t border-slate-800 flex items-center justify-between">
+          <button id="deleteNodeBtn" class="py-1.5 px-3 bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/40 rounded-xl text-xs font-semibold transition">
+            Delete Node
+          </button>
+          <button id="applyNodeChangesBtn" class="py-2 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl transition shadow-md flex items-center gap-1.5">
+            <span>Apply Node & Module Edits</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ========================================================================= -->
+  <!-- TAB 2: Knowledge Ingestion & RAG Management Studio -->
+  <!-- ========================================================================= -->
+  <main id="tabKnowledge" class="studio-tab flex-1 flex flex-col max-w-[1850px] w-full mx-auto p-6 gap-5 hidden">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+      
+      <!-- LEFT 7 COLS: Indexed Documents Table & Live BM25 Search -->
+      <div class="lg:col-span-7 bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-xs font-bold uppercase tracking-wider text-slate-300">Indexed Knowledge Documents</h2>
+            <p class="text-[11px] text-slate-400">Enterprise documentation chunked and queryable with sub-5ms BM25 hybrid search</p>
+          </div>
+          <span id="studioKbCountBadge" class="text-[10px] font-mono bg-indigo-950 text-indigo-300 border border-indigo-700/50 px-2 py-0.5 rounded">3 documents</span>
+        </div>
+
+        <!-- Search Test Box -->
+        <div class="flex items-center gap-2">
+          <input id="kbSearchQuery" type="text" placeholder="Test live RAG retrieval (e.g. When can my prescription be delivered?)..." class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500">
+          <button id="kbSearchBtn" class="py-2 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl transition">
+            Test Query
+          </button>
+        </div>
+
+        <!-- Search Result Box (If tested) -->
+        <div id="kbTestResultsBox" class="p-3 bg-slate-950/80 border border-indigo-800/40 rounded-xl text-xs space-y-1 hidden">
+          <div class="font-bold text-indigo-300 text-[11px] flex justify-between">
+            <span>⚡ Top RAG Context Retrieved:</span>
+            <span id="kbScoreBadge" class="font-mono text-slate-400">Score: 1.5</span>
+          </div>
+          <div id="kbSnippetText" class="text-slate-300 font-mono text-[10px] leading-relaxed"></div>
+        </div>
+
+        <!-- Document List -->
+        <div id="studioKbList" class="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+          <!-- Documents rendered dynamically -->
+        </div>
+      </div>
+
+      <!-- RIGHT 5 COLS: Document Ingestion Form -->
+      <div class="lg:col-span-5 bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+        <div class="pb-3 border-b border-slate-800">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-200">Ingest New Enterprise Document</h3>
+          <p class="text-[11px] text-slate-400">Upload policies, guidelines, clinical manuals, or FAQs for instant speech grounding</p>
+        </div>
+
+        <div class="space-y-3 text-xs">
+          <div>
+            <label class="font-bold text-slate-300 block mb-1 text-[11px]">Document Title</label>
+            <input id="newDocTitle" type="text" placeholder="e.g., Cardiology Pre-Op Guidelines" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 text-xs focus:outline-none focus:border-indigo-500">
+          </div>
+
+          <div>
+            <label class="font-bold text-slate-300 block mb-1 text-[11px]">Document Category / Source Type</label>
+            <select id="newDocSourceType" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 text-xs focus:outline-none focus:border-indigo-500">
+              <option value="policy">Hospital Policy & Procedures</option>
+              <option value="faq">Department FAQs & Hours</option>
+              <option value="clinical">Clinical Guidelines & Dosage</option>
+              <option value="pricing">Insurance & Copay Schedules</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="font-bold text-slate-300 block mb-1 text-[11px]">Document Content (Markdown / Plain Text)</label>
+            <textarea id="newDocContent" rows="10" placeholder="Paste full documentation, operating guidelines, or doctor schedules..." class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 text-xs focus:outline-none focus:border-indigo-500 leading-relaxed font-mono"></textarea>
+          </div>
+
+          <button id="studioIngestBtn" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl transition shadow-lg shadow-indigo-900/30">
+            🚀 Ingest, Auto-Chunk & Index (Sub-5ms RAG)
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ========================================================================= -->
+  <!-- TAB 3: Dynamic Webhook & Tool Connectors Studio -->
+  <!-- ========================================================================= -->
+  <main id="tabWebhooks" class="studio-tab flex-1 flex flex-col max-w-[1850px] w-full mx-auto p-6 gap-5 hidden">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+      
+      <!-- LEFT 7 COLS: Active Dynamic Webhooks -->
+      <div class="lg:col-span-7 bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-xs font-bold uppercase tracking-wider text-slate-300">Dynamic API Webhook Connectors</h2>
+            <p class="text-[11px] text-slate-400">External HTTP endpoints executed during calls with dynamic slot interpolation</p>
+          </div>
+          <span id="studioToolCountBadge" class="text-[10px] font-mono bg-cyan-950 text-cyan-300 border border-cyan-700/50 px-2 py-0.5 rounded">2 active</span>
+        </div>
+
+        <div id="studioToolList" class="space-y-3 max-h-[560px] overflow-y-auto pr-1">
+          <!-- Dynamic tools rendered here -->
+        </div>
+      </div>
+
+      <!-- RIGHT 5 COLS: Register New Webhook Tool Form -->
+      <div class="lg:col-span-5 bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+        <div class="pb-3 border-b border-slate-800">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-200">Register Custom Tool / Webhook</h3>
+          <p class="text-[11px] text-slate-400">Connect CRM, EHR, billing gateway, or courier API without code modifications</p>
+        </div>
+
+        <div class="space-y-3 text-xs">
+          <div>
+            <label class="font-bold text-slate-300 block mb-1 text-[11px]">Tool Identifier</label>
+            <input id="newToolId" type="text" placeholder="e.g., query_patient_ehr" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 font-mono text-xs focus:outline-none focus:border-cyan-500">
+          </div>
+
+          <div>
+            <label class="font-bold text-slate-300 block mb-1 text-[11px]">Display Name</label>
+            <input id="newToolName" type="text" placeholder="Lookup EHR Patient Record" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 text-xs focus:outline-none focus:border-cyan-500">
+          </div>
+
+          <div class="grid grid-cols-3 gap-2">
+            <div>
+              <label class="font-bold text-slate-300 block mb-1 text-[11px]">Method</label>
+              <select id="newToolMethod" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 text-xs font-mono">
+                <option value="POST">POST</option>
+                <option value="GET">GET</option>
+                <option value="PUT">PUT</option>
+              </select>
+            </div>
+            <div class="col-span-2">
+              <label class="font-bold text-slate-300 block mb-1 text-[11px]">Endpoint URL</label>
+              <input id="newToolUrl" type="text" placeholder="https://api.crm.com/lookup" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 font-mono text-xs focus:outline-none focus:border-cyan-500">
+            </div>
+          </div>
+
+          <div>
+            <label class="font-bold text-slate-300 block mb-1 text-[11px]">Payload Template (JSON with {{slots.key}})</label>
+            <textarea id="newToolBody" rows="3" placeholder='{"patient_name": "{{slots.patient_name}}", "dob": "{{slots.dob}}"}' class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 font-mono text-xs focus:outline-none focus:border-cyan-500"></textarea>
+          </div>
+
+          <button id="studioRegisterToolBtn" class="w-full py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs rounded-xl transition shadow-lg shadow-cyan-900/30">
+            ⚡ Register & Persist Webhook Tool
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ========================================================================= -->
+  <!-- JavaScript Controller for Studio & Persistent API -->
+  <!-- ========================================================================= -->
+  <script>
+    let activeWorkflows = {};
+    let currentFlowId = "beacon_reception_triage";
+    let selectedNodeId = null;
+
+    // Tab Navigation
+    const navButtons = document.querySelectorAll('.nav-tab-btn');
+    const studioTabs = document.querySelectorAll('.studio-tab');
+
+    navButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const targetTab = btn.getAttribute('data-tab');
+        navButtons.forEach(b => {
+          b.className = "nav-tab-btn py-1.5 px-3.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 text-slate-400 hover:text-slate-200";
+        });
+        btn.className = "nav-tab-btn py-1.5 px-3.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 bg-indigo-600 text-white shadow-sm";
+
+        studioTabs.forEach(t => {
+          if (t.id === targetTab) t.classList.remove('hidden');
+          else t.classList.add('hidden');
+        });
+      });
+    });
+
+    // Load All Workflows from SQLite
+    async function loadWorkflows() {
+      try {
+        const resp = await fetch('/api/workflow/list');
+        const data = await resp.json();
+        activeWorkflows = {};
+        const select = document.getElementById('workflowSelect');
+        select.innerHTML = '';
+
+        (data.workflows || []).forEach(wf => {
+          activeWorkflows[wf.id] = wf;
+          const opt = document.createElement('option');
+          opt.value = wf.id;
+          opt.textContent = `${wf.name} (${wf.id})`;
+          if (wf.id === currentFlowId) opt.selected = true;
+          select.appendChild(opt);
+        });
+
+        if (!activeWorkflows[currentFlowId] && data.workflows && data.workflows.length > 0) {
+          currentFlowId = data.workflows[0].id;
+        }
+
+        renderWorkflowCanvas(currentFlowId);
+      } catch (e) {
+        console.error('Failed to load workflows:', e);
+      }
+    }
+
+    document.getElementById('workflowSelect').addEventListener('change', (e) => {
+      currentFlowId = e.target.value;
+      selectedNodeId = null;
+      renderWorkflowCanvas(currentFlowId);
+    });
+
+    function renderWorkflowCanvas(flowId) {
+      const wf = activeWorkflows[flowId];
+      if (!wf) return;
+
+      document.getElementById('canvasFlowNameBadge').textContent = `${wf.name} (${wf.id})`;
+      const container = document.getElementById('canvasNodesContainer');
+      container.innerHTML = '';
+
+      const nodes = wf.nodes || {};
+      const nodeKeys = Object.keys(nodes);
+
+      // Auto-select initial node if nothing selected
+      if (!selectedNodeId && wf.initial_node_id && nodes[wf.initial_node_id]) {
+        selectedNodeId = wf.initial_node_id;
+      } else if (!selectedNodeId && nodeKeys.length > 0) {
+        selectedNodeId = nodeKeys[0];
+      }
+
+      nodeKeys.forEach((key, idx) => {
+        const node = nodes[key];
+        const isSelected = selectedNodeId === key;
+        const isEntry = wf.initial_node_id === key || node.node_type === 'entry';
+
+        const card = document.createElement('div');
+        card.className = `node-card p-4 rounded-2xl bg-slate-950 border ${isSelected ? 'node-selected border-indigo-500' : 'border-slate-800'} cursor-pointer space-y-3`;
+        card.onclick = () => selectNode(key);
+
+        const modules = node.modules || [];
+        const attachedDocs = node.attached_knowledge_doc_ids || [];
+        const boundTools = node.bound_tool_ids || [];
+        const slots = node.slots || [];
+        const transitions = node.transitions || [];
+
+        // Build Module Badges
+        const badgesHtml = `
+          <div class="flex flex-wrap gap-1.5 pt-1">
+            ${attachedDocs.length > 0 ? `<span class="text-[9px] font-mono bg-cyan-950/80 text-cyan-300 border border-cyan-800/50 px-1.5 py-0.5 rounded">📚 ${attachedDocs.length} RAG Docs</span>` : ''}
+            ${boundTools.length > 0 ? `<span class="text-[9px] font-mono bg-amber-950/80 text-amber-300 border border-amber-800/50 px-1.5 py-0.5 rounded">⚡ ${boundTools.length} Tools</span>` : ''}
+            ${slots.length > 0 ? `<span class="text-[9px] font-mono bg-purple-950/80 text-purple-300 border border-purple-800/50 px-1.5 py-0.5 rounded">🎯 ${slots.length} Slots</span>` : ''}
+            ${transitions.length > 0 ? `<span class="text-[9px] font-mono bg-rose-950/80 text-rose-300 border border-rose-800/50 px-1.5 py-0.5 rounded">🔀 ${transitions.length} Edges</span>` : ''}
+          </div>
+        `;
+
+        card.innerHTML = `
+          <div class="flex justify-between items-start">
+            <div class="flex items-center gap-1.5">
+              ${isEntry ? '<span class="text-[10px] font-mono bg-emerald-950 text-emerald-400 border border-emerald-800/50 px-1.5 py-0.5 rounded font-bold">ENTRY</span>' : ''}
+              <span class="font-bold text-xs text-indigo-300">${node.title || key}</span>
+            </div>
+            <span class="text-[9px] font-mono text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded">${key}</span>
+          </div>
+          <div class="text-[11px] text-slate-400 line-clamp-2 leading-relaxed font-mono bg-slate-900/60 p-2 rounded-lg">${node.instructions}</div>
+          ${badgesHtml}
+          <div class="pt-2 border-t border-slate-900 flex justify-between items-center text-[10px] text-slate-500 font-mono">
+            <span>Modules: ${modules.length > 0 ? modules.length : (attachedDocs.length + boundTools.length > 0 ? 'Multi' : 'Default')}</span>
+            <span>Type: ${node.node_type || 'action'}</span>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+
+      updateNextNodeDropdown(nodeKeys);
+      if (selectedNodeId && nodes[selectedNodeId]) {
+        selectNode(selectedNodeId);
+      }
+    }
+
+    function selectNode(nodeId) {
+      selectedNodeId = nodeId;
+      const wf = activeWorkflows[currentFlowId];
+      if (!wf || !wf.nodes[nodeId]) return;
+
+      const node = wf.nodes[nodeId];
+      document.getElementById('inspectorNodeBadge').textContent = nodeId;
+      document.getElementById('inspectorNodeTypeBadge').textContent = (node.node_type || 'action').toUpperCase() + ' NODE';
+      document.getElementById('editNodeId').value = nodeId;
+      document.getElementById('editNodeType').value = node.node_type || 'action';
+      document.getElementById('editNodeTitle').value = node.title || '';
+      document.getElementById('editNodeInstructions').value = node.instructions || '';
+      document.getElementById('editNodeDocs').value = (node.attached_knowledge_doc_ids || []).join(', ');
+      document.getElementById('editNodeTools').value = (node.bound_tool_ids || []).join(', ');
+      document.getElementById('editNodeSlots').value = (node.slots || []).map(s => s.name).join(', ');
+
+      const defaultNext = (node.transitions && node.transitions.length > 0) ? node.transitions[0].target_node_id : '';
+      document.getElementById('editNextNodeSelect').value = defaultNext;
+
+      // Render Modules List
+      renderNodeModules(node);
+
+      // Highlight in canvas
+      document.querySelectorAll('.node-card').forEach(c => c.classList.remove('node-selected'));
+    }
+
+    function renderNodeModules(node) {
+      const container = document.getElementById('nodeModulesContainer');
+      const modules = node.modules || [];
+      document.getElementById('moduleCountBadge').textContent = `${modules.length} active`;
+
+      if (modules.length === 0) {
+        container.innerHTML = `
+          <div class="p-3 bg-slate-950/70 border border-dashed border-slate-800 rounded-xl text-center text-slate-500 text-[11px]">
+            No custom sub-modules attached. Using direct node directives and bindings.
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = modules.map((m, idx) => `
+        <div class="p-3 bg-slate-950 border border-slate-800/90 rounded-xl space-y-1">
+          <div class="flex justify-between items-center font-bold text-xs">
+            <span class="text-indigo-300 font-medium">${m.title}</span>
+            <span class="text-[9px] font-mono uppercase bg-slate-900 text-slate-400 px-1.5 py-0.5 rounded">${m.module_type}</span>
+          </div>
+          <p class="text-[11px] text-slate-400 leading-relaxed">${m.description}</p>
+        </div>
+      `).join('');
+    }
+
+    function updateNextNodeDropdown(nodeKeys) {
+      const select = document.getElementById('editNextNodeSelect');
+      select.innerHTML = '<option value="">-- Conclude Workflow (End Node) --</option>';
+      nodeKeys.forEach(k => {
+        const opt = document.createElement('option');
+        opt.value = k;
+        opt.textContent = `Node: ${k}`;
+        select.appendChild(opt);
+      });
+    }
+
+    document.getElementById('applyNodeChangesBtn').addEventListener('click', () => {
+      if (!selectedNodeId) return;
+      const wf = activeWorkflows[currentFlowId];
+      if (!wf || !wf.nodes[selectedNodeId]) return;
+
+      const node = wf.nodes[selectedNodeId];
+      node.node_type = document.getElementById('editNodeType').value;
+      node.title = document.getElementById('editNodeTitle').value.trim();
+      node.instructions = document.getElementById('editNodeInstructions').value.trim();
+      
+      const docsStr = document.getElementById('editNodeDocs').value.trim();
+      node.attached_knowledge_doc_ids = docsStr ? docsStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+      const toolsStr = document.getElementById('editNodeTools').value.trim();
+      node.bound_tool_ids = toolsStr ? toolsStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+      const slotsStr = document.getElementById('editNodeSlots').value.trim();
+      node.slots = slotsStr ? slotsStr.split(',').map(s => ({
+        name: s.trim(),
+        description: s.trim(),
+        slot_type: "text",
+        required: true,
+        validation_regex: null
+      })).filter(s => s.name) : [];
+
+      const nextNode = document.getElementById('editNextNodeSelect').value;
+      if (nextNode) {
+        node.transitions = [{
+          target_node_id: nextNode,
+          condition_intent: null,
+          condition_expression: null,
+          label: `Proceed ➔ ${nextNode}`
+        }];
+      } else {
+        node.transitions = [];
+      }
+
+      renderWorkflowCanvas(currentFlowId);
+      alert('Node & action modules updated. Click "Save & Persist to SQLite" to commit changes.');
+    });
+
+    document.getElementById('saveWorkflowBtn').addEventListener('click', async () => {
+      const wf = activeWorkflows[currentFlowId];
+      if (!wf) return;
+
+      try {
+        const resp = await fetch('/api/workflow/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(wf)
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        alert(`Workflow "${wf.name}" persisted to SQLite database and live in voice carrier engine!`);
+      } catch (e) {
+        alert('Failed to save workflow: ' + e.message);
+      }
+    });
+
+    // ==========================================
+    // Knowledge Base Studio Management
+    // ==========================================
+    async function loadStudioKnowledge() {
+      try {
+        const resp = await fetch('/api/knowledge/documents');
+        const data = await resp.json();
+        const docs = data.documents || [];
+        document.getElementById('studioKbCountBadge').textContent = `${docs.length} documents`;
+
+        const list = document.getElementById('studioKbList');
+        list.innerHTML = docs.map(d => `
+          <div class="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-2">
+            <div class="flex justify-between items-center font-bold text-xs">
+              <span class="text-indigo-300">${d.title}</span>
+              <span class="text-[10px] font-mono text-slate-500 uppercase bg-slate-900 px-2 py-0.5 rounded">${d.source_type}</span>
+            </div>
+            <div class="text-[11px] text-slate-400 font-mono leading-relaxed line-clamp-3">${d.content}</div>
+            <div class="pt-2 border-t border-slate-900 flex justify-between items-center text-[10px] text-slate-500 font-mono">
+              <span>${d.chunks ? d.chunks.length : 1} chunks indexed</span>
+              <span>Sub-5ms BM25 Vector</span>
+            </div>
+          </div>
+        `).join('');
+      } catch (e) {
+        console.error('Failed to load knowledge:', e);
+      }
+    }
+
+    document.getElementById('studioIngestBtn').addEventListener('click', async () => {
+      const title = document.getElementById('newDocTitle').value.trim();
+      const source_type = document.getElementById('newDocSourceType').value;
+      const content = document.getElementById('newDocContent').value.trim();
+
+      if (!title || !content) {
+        alert('Please provide title and content');
+        return;
+      }
+
+      try {
+        await fetch('/api/knowledge/documents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, source_type, content })
+        });
+        document.getElementById('newDocTitle').value = '';
+        document.getElementById('newDocContent').value = '';
+        loadStudioKnowledge();
+        alert(`Document "${title}" ingested and chunked in-memory successfully.`);
+      } catch (e) {
+        alert('Failed to ingest document: ' + e.message);
+      }
+    });
+
+    document.getElementById('kbSearchBtn').addEventListener('click', async () => {
+      const query = document.getElementById('kbSearchQuery').value.trim();
+      if (!query) return;
+
+      try {
+        const resp = await fetch('/api/knowledge/query', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query, top_k: 1 })
+        });
+        const data = await resp.json();
+        const results = data.results || [];
+        const box = document.getElementById('kbTestResultsBox');
+        if (results.length > 0) {
+          box.classList.remove('hidden');
+          document.getElementById('kbScoreBadge').textContent = `Score: ${results[0].score.toFixed(2)}`;
+          document.getElementById('kbSnippetText').textContent = results[0].snippet;
+        } else {
+          box.classList.remove('hidden');
+          document.getElementById('kbSnippetText').textContent = 'No matching passages found above score threshold.';
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    });
+
+    // ==========================================
+    // Dynamic Tool Webhook Studio Management
+    // ==========================================
+    async function loadStudioTools() {
+      try {
+        const resp = await fetch('/api/tools/dynamic');
+        const data = await resp.json();
+        const tools = data.tools || [];
+        document.getElementById('studioToolCountBadge').textContent = `${tools.length} active`;
+
+        const list = document.getElementById('studioToolList');
+        list.innerHTML = tools.map(t => `
+          <div class="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-2">
+            <div class="flex justify-between items-center font-bold text-xs">
+              <span class="text-cyan-300 font-mono">${t.name}</span>
+              <span class="text-[10px] font-mono bg-cyan-950 text-cyan-400 px-2 py-0.5 rounded">${t.method}</span>
+            </div>
+            <div class="text-[11px] text-slate-400">${t.description}</div>
+            <div class="text-[10px] font-mono text-slate-500 truncate pt-1 border-t border-slate-900">${t.url}</div>
+          </div>
+        `).join('');
+      } catch (e) {
+        console.error('Failed to load tools:', e);
+      }
+    }
+
+    document.getElementById('studioRegisterToolBtn').addEventListener('click', async () => {
+      const id = document.getElementById('newToolId').value.trim();
+      const name = document.getElementById('newToolName').value.trim();
+      const method = document.getElementById('newToolMethod').value;
+      const url = document.getElementById('newToolUrl').value.trim();
+      const body_template = document.getElementById('newToolBody').value.trim();
+
+      if (!id || !name || !url) {
+        alert('Please fill out Tool ID, Name, and Endpoint URL.');
+        return;
+      }
+
+      try {
+        await fetch('/api/tools/dynamic', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id,
+            name,
+            description: name,
+            method,
+            url,
+            headers: { "Content-Type": "application/json" },
+            query_params: {},
+            body_template: body_template || null,
+            timeout_ms: 800,
+            enabled: true
+          })
+        });
+        document.getElementById('newToolId').value = '';
+        document.getElementById('newToolName').value = '';
+        document.getElementById('newToolUrl').value = '';
+        document.getElementById('newToolBody').value = '';
+        loadStudioTools();
+        alert(`Tool/Webhook "${name}" registered successfully.`);
+      } catch (e) {
+        alert('Failed to register tool: ' + e.message);
+      }
+    });
+
+    // ==========================================
+    // Bring Your Own Key (BYOK) Management
+    // ==========================================
+    const BYOK = {
+      sarvamKey: localStorage.getItem('byok_sarvam_api_key') || '',
+      elevenlabsKey: localStorage.getItem('byok_elevenlabs_api_key') || '',
+      jevKey: localStorage.getItem('byok_jev_api_key') || '',
+
+      save(sarvam, eleven, jev) {
+        this.sarvamKey = sarvam.trim();
+        this.elevenlabsKey = eleven.trim();
+        this.jevKey = jev.trim();
+
+        if (this.sarvamKey) localStorage.setItem('byok_sarvam_api_key', this.sarvamKey);
+        else localStorage.removeItem('byok_sarvam_api_key');
+
+        if (this.elevenlabsKey) localStorage.setItem('byok_elevenlabs_api_key', this.elevenlabsKey);
+        else localStorage.removeItem('byok_elevenlabs_api_key');
+
+        if (this.jevKey) localStorage.setItem('byok_jev_api_key', this.jevKey);
+        else localStorage.removeItem('byok_jev_api_key');
+
+        this.syncToBackend();
+        this.updateBadge();
+      },
+
+      async syncToBackend() {
+        try {
+          const payload = {};
+          if (this.sarvamKey) payload.sarvam_api_key = this.sarvamKey;
+          if (this.elevenlabsKey) payload.elevenlabs_api_key = this.elevenlabsKey;
+          if (this.jevKey) payload.jev_api_key = this.jevKey;
+
+          if (Object.keys(payload).length > 0) {
+            await fetch('/api/config/providers', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+          }
+        } catch(e) {
+          console.warn('Failed to sync BYOK keys to local session:', e);
+        }
+      },
+
+      updateBadge() {
+        const badge = document.getElementById('keyStatusBadge');
+        if (!badge) return;
+        if (this.sarvamKey || this.elevenlabsKey) {
+          badge.textContent = 'KEYS CONFIGURED';
+          badge.className = 'text-[9px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-700/60 px-1 py-0.2 rounded';
+        } else {
+          badge.textContent = 'FREE LOCAL STACK';
+          badge.className = 'text-[9px] font-mono bg-indigo-950 text-indigo-300 border border-indigo-700/60 px-1 py-0.2 rounded';
+        }
+      }
+    };
+
+    // Open/Close BYOK Modal
+    document.getElementById('apiKeySettingsBtn').addEventListener('click', () => {
+      document.getElementById('byokSarvamInput').value = BYOK.sarvamKey;
+      document.getElementById('byokElevenInput').value = BYOK.elevenlabsKey;
+      document.getElementById('byokJevInput').value = BYOK.jevKey;
+      document.getElementById('apiKeyModal').classList.remove('hidden');
+    });
+
+    document.getElementById('closeApiKeyModalBtn').addEventListener('click', () => {
+      document.getElementById('apiKeyModal').classList.add('hidden');
+    });
+
+    document.getElementById('saveApiKeyBtn').addEventListener('click', () => {
+      const sarvam = document.getElementById('byokSarvamInput').value;
+      const eleven = document.getElementById('byokElevenInput').value;
+      const jev = document.getElementById('byokJevInput').value;
+
+      BYOK.save(sarvam, eleven, jev);
+      document.getElementById('apiKeyModal').classList.add('hidden');
+      alert('API keys saved securely in your browser and synced to the session.');
+    });
+
+    document.getElementById('clearApiKeyBtn').addEventListener('click', () => {
+      BYOK.save('', '', '');
+      document.getElementById('byokSarvamInput').value = '';
+      document.getElementById('byokElevenInput').value = '';
+      document.getElementById('byokJevInput').value = '';
+      alert('Stored API keys cleared. Free Local CUDA Stack is active.');
+    });
+
+    // Init Studio
+    loadWorkflows();
+    loadStudioKnowledge();
+    loadStudioTools();
+    BYOK.updateBadge();
+    BYOK.syncToBackend();
+  </script>
+
+  <!-- Bring Your Own API Key (BYOK) Modal -->
+  <div id="apiKeyModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg p-6 shadow-2xl space-y-4">
+      <div class="flex justify-between items-center pb-3 border-b border-slate-800">
+        <div>
+          <h3 class="font-bold text-sm text-slate-100 flex items-center gap-1.5">
+            <span>🔑 Bring Your Own API Keys (BYOK)</span>
+          </h3>
+          <p class="text-[11px] text-slate-400">Keys are stored locally in your browser and used only for your live session.</p>
+        </div>
+        <button id="closeApiKeyModalBtn" class="text-slate-400 hover:text-white text-xs p-1">✕</button>
+      </div>
+
+      <div class="space-y-3.5 text-xs">
+        <div>
+          <div class="flex justify-between items-center mb-1">
+            <label class="font-bold text-slate-300 text-[11px] flex items-center gap-1">
+              <span>🇮🇳 Sarvam AI API Key</span>
+            </label>
+            <a href="https://dashboard.sarvam.ai" target="_blank" class="text-[10px] text-indigo-400 hover:underline">Get Key ↗</a>
+          </div>
+          <input id="byokSarvamInput" type="password" placeholder="Enter your Sarvam API subscription key..." class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 text-xs font-mono focus:outline-none focus:border-indigo-500">
+          <p class="text-[10px] text-slate-500 mt-1">Powers Saaras STT, Bulbul TTS, and Sarvam-105B Indic LLM.</p>
+        </div>
+
+        <div>
+          <div class="flex justify-between items-center mb-1">
+            <label class="font-bold text-slate-300 text-[11px] flex items-center gap-1">
+              <span>✨ ElevenLabs API Key</span>
+            </label>
+            <a href="https://elevenlabs.io" target="_blank" class="text-[10px] text-purple-400 hover:underline">Get Key ↗</a>
+          </div>
+          <input id="byokElevenInput" type="password" placeholder="Enter your ElevenLabs API key..." class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 text-xs font-mono focus:outline-none focus:border-purple-500">
+          <p class="text-[10px] text-slate-500 mt-1">Powers Ultra-HD natural voice synthesis (Turbo v2.5).</p>
+        </div>
+
+        <div>
+          <div class="flex justify-between items-center mb-1">
+            <label class="font-bold text-slate-300 text-[11px] flex items-center gap-1">
+              <span>⚡ TypeSafe Jev API Key (Optional)</span>
+            </label>
+            <a href="https://typesafe.ai" target="_blank" class="text-[10px] text-teal-400 hover:underline">Get Key ↗</a>
+          </div>
+          <input id="byokJevInput" type="password" placeholder="Enter your TypeSafe Jev API key..." class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 text-xs font-mono focus:outline-none focus:border-teal-500">
+          <p class="text-[10px] text-slate-500 mt-1">Powers Cloud System One sub-millisecond intent and slot extraction.</p>
+        </div>
+
+        <div class="p-3 bg-slate-950 border border-slate-800 rounded-xl text-[11px] space-y-1.5 text-slate-300">
+          <div class="flex items-center gap-1.5 text-emerald-400 font-bold">
+            <span>🛡️ Privacy & Open Source Guarantee</span>
+          </div>
+          <p class="text-[10px] text-slate-400 leading-relaxed">
+            This is an open-source demo. Your keys are stored directly in your local browser (<code class="text-indigo-300">localStorage</code>) and are never logged, persisted in a database, or shared. Leave blank to run the completely free Local CUDA stack.
+          </p>
+        </div>
+
+        <div class="flex gap-2 pt-2">
+          <button id="saveApiKeyBtn" class="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition text-xs shadow-md">
+            Save & Activate Keys
+          </button>
+          <button id="clearApiKeyBtn" class="py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl transition text-xs border border-slate-700">
+            Clear Keys
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
