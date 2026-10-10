@@ -1,0 +1,15 @@
+# Rust Build Artifacts
+/target/
+target/
+**/*.rs.bk
+*.pdb
+
+# Environment & Secrets
+.env
+.env.*
+*.env
+!.env.example
+
+# OS / Editor Files
+.DS_Store
+*.log

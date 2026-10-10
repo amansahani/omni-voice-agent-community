@@ -1,0 +1,26 @@
+# Environment Variables & Secrets
+.env
+.env.*
+*.env
+!.env.example
+
+# Binaries & Compiled Objects
+media_server
+rust_carrier/target/
+target/
+*.exe
+*.o
+*.a
+*.so
+
+# Python Cache
+__pycache__/
+*.pyc
+
+# Temporary & Log files
+*.log
+tmp/
+scratch/
+*.db
+*.sqlite
+*.sqlite3

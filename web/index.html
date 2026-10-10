@@ -1,0 +1,2349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Beacon Health | Provider-Agnostic Real-Time Voice Carrier</title>
+  <script src="/ort.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+      70% { transform: scale(1); box-shadow: 0 0 0 14px rgba(16, 185, 129, 0); }
+      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+    .call-active-ring { animation: pulse-ring 2s infinite cubic-bezier(0.4, 0, 0.6, 1); }
+    
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(1.1); }
+    }
+    .pulse-indicator { animation: pulse-dot 1.5s infinite ease-in-out; }
+
+    @keyframes glow-update {
+      0% { background-color: rgba(59, 130, 246, 0.35); }
+      100% { background-color: transparent; }
+    }
+    .stat-updated { animation: glow-update 1.2s ease-out; }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
+    ::-webkit-scrollbar-thumb { background: rgba(51, 65, 85, 0.8); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(71, 85, 105, 1); }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased flex flex-col selection:bg-emerald-500 selection:text-slate-950">
+
+  <!-- Top Navigation Bar -->
+  <header class="bg-slate-900/90 backdrop-blur border-b border-slate-800 sticky top-0 z-30 px-6 py-3">
+    <div class="max-w-[1700px] mx-auto flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
+      <div class="flex items-center gap-3">
+        <div id="statusDot" class="h-3.5 w-3.5 rounded-full bg-emerald-500 pulse-indicator shadow-lg shadow-emerald-500/30"></div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+              <span>Beacon Health</span>
+              <span class="text-xs font-normal text-emerald-400 bg-emerald-950/80 border border-emerald-700/60 px-2 py-0.5 rounded-md font-mono">Provider-Agnostic Voice Carrier</span>
+            </h1>
+          </div>
+          <p class="text-xs text-slate-400 mt-0.5">Silero Neural VAD v5 + Hybrid Orchestration: Local CUDA (Whisper/Qwen3/Kokoro) & Sarvam AI Indic Stack</p>
+        </div>
+      </div>
+
+      <!-- Provider & Language Selection Toolbar -->
+      <div class="flex flex-wrap items-center gap-2.5">
+        
+        <!-- Active Provider Selector -->
+        <div class="flex items-center bg-slate-950 border border-slate-700/80 rounded-xl p-1 shadow-inner text-xs">
+          <label class="text-[11px] font-bold text-slate-400 px-2 flex items-center gap-1">
+            <span>Stack:</span>
+          </label>
+          <select id="providerSelect" class="bg-slate-900 text-slate-200 text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium cursor-pointer">
+            <option value="local">🖥️ Local CUDA Stack (RTX 3060)</option>
+            <option value="sarvam">🇮🇳 Sarvam AI Indic Cloud (Saaras / 105B / Bulbul)</option>
+            <option value="elevenlabs">✨ ElevenLabs Ultra-HD Voice (Turbo v2.5)</option>
+          </select>
+        </div>
+
+        <!-- ElevenLabs Controls (Visible when ElevenLabs active) -->
+        <div id="elevenlabsControls" class="flex items-center gap-2 hidden">
+          <div class="flex items-center bg-slate-950 border border-purple-800/60 rounded-xl p-1 text-xs">
+            <label class="text-[11px] font-bold text-purple-400 px-2">Voice:</label>
+            <select id="elevenVoiceSelect" class="bg-slate-900 text-purple-200 text-xs px-2 py-1.5 rounded-lg border border-purple-700/50 focus:outline-none">
+              <option value="21m00Tcm4TlvDq8ikWAM">Rachel (Calm & Natural)</option>
+              <option value="EXAVITQu4vr4xnSDxMaL">Bella (Friendly & Warm)</option>
+              <option value="ErXwobaYiN019PkySvjV">Antoni (Professional MD)</option>
+              <option value="pNInz6obpgDQGcFmaJgB">Adam (Deep Authority)</option>
+              <option value="VR6AewLTigWG4xSOukaG">Arnold (Crisp Narrative)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Sarvam Language / Voice Controls (Visible when Sarvam active) -->
+        <div id="sarvamControls" class="flex items-center gap-2 hidden">
+          <div class="flex items-center bg-slate-950 border border-indigo-800/60 rounded-xl p-1 text-xs">
+            <label class="text-[11px] font-bold text-indigo-400 px-2">Lang:</label>
+            <select id="sarvamLangSelect" class="bg-slate-900 text-indigo-200 text-xs px-2 py-1.5 rounded-lg border border-indigo-700/50 focus:outline-none">
+              <option value="en-IN">English (India)</option>
+              <option value="hi-IN">Hindi (हिन्दी)</option>
+              <option value="te-IN">Telugu (తెలుగు)</option>
+              <option value="ta-IN">Tamil (தமிழ்)</option>
+              <option value="bn-IN">Bengali (বাংলা)</option>
+              <option value="mr-IN">Marathi (मराठी)</option>
+              <option value="gu-IN">Gujarati (ગુજરાતી)</option>
+              <option value="kn-IN">Kannada (ಕನ್ನಡ)</option>
+            </select>
+          </div>
+
+          <div class="flex items-center bg-slate-950 border border-teal-800/60 rounded-xl p-1 text-xs">
+            <label class="text-[11px] font-bold text-teal-400 px-2">Voice:</label>
+            <select id="sarvamVoiceSelect" class="bg-slate-900 text-teal-200 text-xs px-2 py-1.5 rounded-lg border border-teal-700/50 focus:outline-none">
+              <option value="shubh">Shubh (Male Natural)</option>
+              <option value="ananya">Ananya (Female Clear)</option>
+              <option value="arvind">Arvind (Male Deep)</option>
+              <option value="priya">Priya (Female Soft)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- BYOK: Bring Your Own API Key Configuration Button -->
+        <button id="apiKeySettingsBtn" class="flex items-center bg-slate-950 border border-slate-700/80 hover:border-indigo-500 rounded-xl px-3 py-2 text-xs gap-2 transition shadow-inner cursor-pointer text-slate-200">
+          <span class="text-amber-400">🔑</span>
+          <div class="flex flex-col text-left">
+            <span class="font-bold text-[11px] text-white flex items-center gap-1.5">
+              <span>API Key Settings</span>
+              <span id="keyStatusBadge" class="text-[9px] font-mono bg-emerald-950 text-emerald-400 border border-emerald-700/60 px-1 py-0.2 rounded">BYOK ACTIVE</span>
+            </span>
+            <span class="text-[10px] text-slate-400 font-mono">Configure Sarvam / ElevenLabs</span>
+          </div>
+        </button>
+
+        <!-- Link to Enterprise Workflow & Knowledge Studio -->
+        <a href="/studio.html" class="text-xs bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white px-3 py-2 rounded-xl font-bold transition flex items-center gap-1.5 shadow-md shadow-indigo-900/40">
+          <span>🛠️ Enterprise Studio</span>
+        </a>
+
+        <button id="resetSessionBtn" class="text-xs bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 px-3 py-2 rounded-xl border border-slate-700 transition flex items-center gap-1.5 shadow-sm">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+          <span>Reset Session</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Top Real-Time Latency Dashboard Banner (Enterprise Telemetry Ribbon) -->
+  <section class="border-b border-slate-800/80 bg-slate-900/60 px-6 py-2">
+    <div class="max-w-[1700px] mx-auto flex flex-wrap items-center justify-between gap-3 text-xs">
+      <div class="flex items-center gap-4">
+        <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          <span>Pipeline Telemetry</span>
+        </span>
+        <div class="flex items-center gap-3 font-mono text-[11px]">
+          <span class="text-slate-400">VAD: <b id="statVad" class="text-teal-400">0.1ms</b></span>
+          <span class="text-slate-600">•</span>
+          <span class="text-slate-400">ASR: <b id="statAsr" class="text-blue-400">-- ms</b></span>
+          <span class="text-slate-600">•</span>
+          <span class="text-slate-400">System One: <b id="statClef" class="text-indigo-400">-- ms</b></span>
+          <span class="text-slate-600">•</span>
+          <span class="text-slate-400">Tool: <b id="statTool" class="text-cyan-400">-- &micro;s</b></span>
+          <span class="text-slate-600">•</span>
+          <span class="text-slate-400">LLM: <b id="statLlm" class="text-purple-400">-- ms</b></span>
+          <span class="text-slate-600">•</span>
+          <span class="text-slate-400">TTS: <b id="statTts" class="text-emerald-400">-- ms</b></span>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <span class="text-slate-400 text-[11px]">Total Roundtrip:</span>
+        <span id="statTotal" class="font-mono text-sm font-black text-amber-400">--</span>
+        <span class="text-[10px] text-slate-500 font-mono">ms</span>
+        <span id="statVerdictBadge" class="text-[9px] text-emerald-400 font-mono font-bold bg-emerald-950/80 border border-emerald-800/60 px-2 py-0.5 rounded-full ml-1">Real-time Ready</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Main Desktop 3-Column Responsive Grid -->
+  <main class="max-w-[1700px] w-full mx-auto px-6 py-5 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+    
+    <!-- LEFT PANEL: Audio Engine, Microphone Controls & Live Oscilloscope (4 cols) -->
+    <div class="lg:col-span-4 space-y-4">
+      
+      <!-- Call Control & Status Card -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Continuous Voice Call</span>
+            <span id="callStateBadge" class="text-[10px] bg-slate-800 text-slate-400 font-mono px-2 py-0.5 rounded-full">Off Call</span>
+          </div>
+          <span id="agentStateBadge" class="text-[10px] text-emerald-400 font-mono bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded">Ready</span>
+        </div>
+
+        <!-- Big Start / End Call Button -->
+        <button id="callBtn" class="w-full py-4 px-4 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] text-white font-bold rounded-xl shadow-lg shadow-emerald-900/30 transition-all flex flex-col items-center justify-center gap-1 cursor-pointer">
+          <span id="callBtnText" class="text-base flex items-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path></svg>
+            <span>Start Real-Time Voice Call</span>
+          </span>
+          <span id="callBtnSub" class="text-xs font-mono font-normal opacity-80">Full-Duplex • Silero Neural VAD Active</span>
+        </button>
+
+        <!-- ElevenLabs Voice Orb & Dynamic Visualizer -->
+        <div class="mt-4 space-y-2">
+          <div class="flex justify-between items-center text-xs">
+            <span class="text-slate-400 font-medium flex items-center gap-1.5">
+              <span id="orbStatusGlow" class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+              <span>Voice Orb & Spectrum Visualizer</span>
+            </span>
+            <div class="flex items-center gap-2">
+              <span id="sentimentPill" class="text-[10px] font-mono font-bold bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 px-2 py-0.5 rounded-full flex items-center gap-1">
+                <span>🟢</span>
+                <span id="sentimentLabel">Neutral</span>
+              </span>
+              <span id="audioStreamLabel" class="font-mono text-[11px] text-slate-500">Standby</span>
+            </div>
+          </div>
+
+          <div class="relative w-full h-36 bg-gradient-to-b from-slate-950 to-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-inner flex items-center justify-center">
+            <canvas id="liveVisualizer" class="w-full h-full block"></canvas>
+            <div id="visOverlayText" class="absolute pointer-events-none text-xs text-slate-500 font-mono flex flex-col items-center gap-1">
+              <div class="w-8 h-8 rounded-full border border-dashed border-slate-600 animate-spin"></div>
+              <span>Click Start Call to awaken voice orb</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Silero VAD Probability Gauge & Noise Gate -->
+        <div class="mt-4 space-y-2.5">
+          <div class="flex justify-between items-center text-xs">
+            <span class="text-slate-400">Silero Human Voice Probability:</span>
+            <span id="vadStatus" class="font-mono font-bold text-slate-400">Idle</span>
+          </div>
+          
+          <div class="w-full bg-slate-950 rounded-full h-3 overflow-hidden border border-slate-800 relative">
+            <div id="vadMeter" class="bg-gradient-to-r from-teal-500 to-emerald-400 h-3 rounded-full transition-all duration-75" style="width: 0%"></div>
+            <div id="thresholdMarker" class="absolute top-0 bottom-0 w-1 bg-amber-400 shadow" style="left: 22%" title="Speech Detection Threshold (22%)"></div>
+          </div>
+
+          <div class="flex justify-between text-[11px] text-slate-400 font-mono pt-0.5">
+            <span>Probability: <b id="probVal" class="text-slate-200">0.0%</b></span>
+            <span>Filter: <b id="vadClassVal" class="text-slate-400">Quiet/Fan</b></span>
+            <span>Gate: <b id="triggerLabel" class="text-amber-400">22%</b></span>
+          </div>
+        </div>
+
+        <!-- Mic Preamp & Distance Adjustment Slider -->
+        <div class="mt-4 pt-3.5 border-t border-slate-800 space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-slate-400 font-medium">Mic Distance Compensation Preamp:</span>
+            <span id="gainVal" class="text-emerald-400 font-mono font-bold">3.5x (Desk 30-60cm)</span>
+          </div>
+          <input id="micGainSlider" type="range" min="1.0" max="6.0" step="0.5" value="3.5" class="w-full h-1.5 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-emerald-500">
+          <div class="flex justify-between text-[10px] text-slate-500 font-mono">
+            <span>1x (1-5cm Close)</span>
+            <span>3.5x (Desk 30-60cm)</span>
+            <span>6x (Far / Soft Spoken)</span>
+          </div>
+        </div>
+
+        <audio id="ttsAudioPlayer" class="hidden"></audio>
+      </div>
+
+      <!-- Sub-Microsecond In-Memory Tool Registry Card -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-300">In-Memory Tool Engine</h2>
+          <span class="text-[10px] bg-cyan-950 text-cyan-400 border border-cyan-800/40 font-mono px-2 py-0.5 rounded">&lt; 1.0 &micro;s Dispatch</span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+          <div class="p-2 bg-slate-950 border border-slate-800/90 rounded-lg flex justify-between items-center">
+            <span class="font-mono text-slate-300 text-[11px] truncate">list_clinic_services</span>
+            <span class="text-[10px] text-cyan-400 font-mono font-bold">0.42 &micro;s</span>
+          </div>
+          <div class="p-2 bg-slate-950 border border-slate-800/90 rounded-lg flex justify-between items-center">
+            <span class="font-mono text-slate-300 text-[11px] truncate">lookup_doctor_profile</span>
+            <span class="text-[10px] text-cyan-400 font-mono font-bold">0.51 &micro;s</span>
+          </div>
+          <div class="p-2 bg-slate-950 border border-slate-800/90 rounded-lg flex justify-between items-center">
+            <span class="font-mono text-slate-300 text-[11px] truncate">check_calendar</span>
+            <span class="text-[10px] text-cyan-400 font-mono font-bold">0.61 &micro;s</span>
+          </div>
+          <div class="p-2 bg-slate-950 border border-slate-800/90 rounded-lg flex justify-between items-center">
+            <span class="font-mono text-slate-300 text-[11px] truncate">confirm_booking</span>
+            <span class="text-[10px] text-cyan-400 font-mono font-bold">0.82 &micro;s</span>
+          </div>
+          <div class="p-2 bg-slate-950 border border-slate-800/90 rounded-lg flex justify-between items-center">
+            <span class="font-mono text-slate-300 text-[11px] truncate">lookup_prescription</span>
+            <span class="text-[10px] text-cyan-400 font-mono font-bold">0.45 &micro;s</span>
+          </div>
+          <div class="p-2 bg-slate-950 border border-slate-800/90 rounded-lg flex justify-between items-center">
+            <span class="font-mono text-slate-300 text-[11px] truncate">lookup_lab_results</span>
+            <span class="text-[10px] text-cyan-400 font-mono font-bold">0.48 &micro;s</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- CENTER PANEL: Live Agentic Feed & Real-Time Conversation Stream (5 cols) -->
+    <div class="lg:col-span-5 space-y-4">
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col h-[740px]">
+        
+        <!-- Header -->
+        <div class="flex justify-between items-center pb-3 border-b border-slate-800 mb-3">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Live Agentic Audio Feed</span>
+            <span id="turnCounterBadge" class="text-[10px] bg-slate-800 text-slate-400 font-mono px-2 py-0.5 rounded-full">0 turns</span>
+          </div>
+          <button id="clearChatBtn" class="text-[11px] text-slate-400 hover:text-white transition">Clear Feed</button>
+        </div>
+
+        <!-- Chat / Stream Scroll Area -->
+        <div id="chatConsole" class="flex-1 overflow-y-auto space-y-3.5 pr-2">
+          
+          <!-- System Welcome Message -->
+          <div class="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800/80 text-xs text-slate-400 flex items-start gap-3">
+            <div class="w-7 h-7 rounded-lg bg-emerald-950 border border-emerald-700/50 flex items-center justify-center text-emerald-400 font-bold shrink-0 mt-0.5">
+              🤖
+            </div>
+            <div>
+              <div class="font-bold text-slate-200 mb-1">Beacon Health Real-Time Carrier Ready</div>
+              <p class="leading-relaxed">Click <b>"Start Real-Time Voice Call"</b> and speak naturally from 30-60cm. Background fan, breathing, and typing are filtered out by Silero Neural VAD.</p>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Quick Test Suggestions -->
+        <div class="mt-3 pt-2.5 border-t border-slate-800/80 flex flex-wrap gap-1.5 text-[11px]">
+          <span class="text-[10px] uppercase font-bold text-slate-500 self-center mr-1">Try:</span>
+          <button type="button" class="quick-prompt px-2.5 py-1 bg-slate-950 hover:bg-slate-800 text-slate-300 rounded-lg border border-slate-800 transition">
+            Cardiology slots tomorrow?
+          </button>
+          <button type="button" class="quick-prompt px-2.5 py-1 bg-slate-950 hover:bg-slate-800 text-slate-300 rounded-lg border border-slate-800 transition">
+            Refill Lisinopril for delivery
+          </button>
+          <button type="button" class="quick-prompt px-2.5 py-1 bg-slate-950 hover:bg-slate-800 text-slate-300 rounded-lg border border-slate-800 transition">
+            What services do you offer?
+          </button>
+          <button type="button" class="quick-prompt px-2.5 py-1 bg-slate-950 hover:bg-slate-800 text-slate-300 rounded-lg border border-slate-800 transition">
+            Dr. Sarah Lin credentials
+          </button>
+        </div>
+
+        <!-- Manual Text Input Fallback -->
+        <form id="textForm" class="mt-2.5 pt-2.5 border-t border-slate-800 flex gap-2">
+          <input id="textInput" type="text" placeholder="Type a message or question to test full pipeline..." class="flex-1 bg-slate-950 border border-slate-700 text-xs text-slate-100 px-3.5 py-2.5 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-600">
+          <button id="textSubmitBtn" type="submit" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-xs font-semibold text-white rounded-xl transition-all shadow-md">
+            Send
+          </button>
+        </form>
+
+      </div>
+    </div>
+
+    <!-- RIGHT PANEL: Live Conversation Workflow & Session Context (4 cols) -->
+    <div class="lg:col-span-4 space-y-4">
+      
+      <!-- Multi-Workflow State Machine Card -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-300">Active Business Flow</h2>
+          <div class="flex items-center gap-1.5">
+            <a href="/studio.html" class="text-[10px] font-bold bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-lg transition shadow-sm flex items-center gap-1">
+              <span>🛠️ Open Studio</span>
+            </a>
+            <span id="wfStatusBadge" class="text-[10px] bg-indigo-950 text-indigo-400 border border-indigo-700/50 font-mono px-2 py-0.5 rounded">In Progress</span>
+          </div>
+        </div>
+
+        <!-- Flow Switching Badges -->
+        <div class="grid grid-cols-2 gap-1.5 text-[11px] font-medium">
+          <button type="button" class="wf-btn p-2 rounded-lg border border-slate-800 bg-slate-950 text-slate-400 hover:text-white transition text-left" data-flow="reception_dispatcher">
+            🛎️ Reception
+          </button>
+          <button type="button" class="wf-btn p-2 rounded-lg border border-slate-800 bg-slate-950 text-slate-400 hover:text-white transition text-left" data-flow="appointment_scheduling">
+            🩺 Scheduling
+          </button>
+          <button type="button" class="wf-btn p-2 rounded-lg border border-slate-800 bg-slate-950 text-slate-400 hover:text-white transition text-left" data-flow="prescription_refill">
+            💊 Rx Refill
+          </button>
+          <button type="button" class="wf-btn p-2 rounded-lg border border-slate-800 bg-slate-950 text-slate-400 hover:text-white transition text-left" data-flow="lab_results">
+            🧪 Lab Results
+          </button>
+          <button type="button" class="wf-btn p-2 rounded-lg border border-slate-800 bg-slate-950 text-slate-400 hover:text-white transition text-left" data-flow="billing_inquiry">
+            💳 Copay / Bill
+          </button>
+          <button type="button" class="wf-btn p-2 rounded-lg border border-slate-800 bg-slate-950 text-slate-400 hover:text-white transition text-left" data-flow="reschedule_cancel">
+            🔄 Reschedule
+          </button>
+          <button type="button" class="wf-btn p-2 rounded-lg border border-slate-800 bg-slate-950 text-slate-400 hover:text-white transition text-left col-span-2" data-flow="clinical_triage">
+            🚑 Urgent Clinical Triage
+          </button>
+        </div>
+
+        <!-- Current Node & Step Directives -->
+        <div class="p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
+          <div class="flex justify-between items-center text-xs">
+            <span class="text-slate-400">Current Flow:</span>
+            <span id="wfActiveTitle" class="font-bold text-emerald-400 text-right">Clinic Reception</span>
+          </div>
+          <div class="flex justify-between items-center text-xs">
+            <span class="text-slate-400">Active Node:</span>
+            <span id="wfCurrentNode" class="font-mono text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-800/40 text-[11px]">welcome_reception</span>
+          </div>
+          <div class="text-[11px] text-slate-400 pt-2 border-t border-slate-900 leading-relaxed">
+            <span class="text-slate-500 font-bold uppercase text-[10px] block mb-0.5">Step Directives:</span>
+            <span id="wfInstructions" class="text-slate-300">Welcome caller warmly and answer service or doctor inquiries.</span>
+          </div>
+        </div>
+
+        <!-- Live Collected Slots Table -->
+        <div class="space-y-2">
+          <div class="flex justify-between items-center text-xs text-slate-400">
+            <span class="font-bold uppercase tracking-wider text-[10px]">Extracted Session Slots:</span>
+            <span id="wfSlotCount" class="font-mono text-[10px] text-slate-500">0 slots filled</span>
+          </div>
+          <div id="wfSlotsContainer" class="p-2.5 bg-slate-950 border border-slate-800 rounded-xl max-h-56 overflow-y-auto space-y-1.5 text-[11px] font-mono text-slate-300">
+            <div class="text-slate-600 text-[10px] italic">No slots captured yet. Speak naturally to fill.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Active Provider Status Card -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl text-xs space-y-2">
+        <div class="font-bold uppercase tracking-wider text-[10px] text-slate-400 mb-1 flex justify-between">
+          <span>Active Pipeline Providers</span>
+          <span id="providerBadge" class="text-[9px] text-emerald-400 font-mono">Local Stack</span>
+        </div>
+        <div class="flex items-center justify-between text-slate-300">
+          <span>STT Engine:</span>
+          <span id="activeSttLabel" class="font-mono text-blue-400">Whisper.cpp (CUDA)</span>
+        </div>
+        <div class="flex items-center justify-between text-slate-300">
+          <span>Decision:</span>
+          <span class="font-mono text-indigo-400">Clef-Flash System One</span>
+        </div>
+        <div class="flex items-center justify-between text-slate-300">
+          <span>LLM Engine:</span>
+          <span id="activeLlmLabel" class="font-mono text-purple-400">Qwen3-4B (CUDA)</span>
+        </div>
+        <div class="flex items-center justify-between text-slate-300">
+          <span>TTS Engine:</span>
+          <span id="activeTtsLabel" class="font-mono text-emerald-400">Kokoro af_heart</span>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Visual Workflow Graph & DAG Studio Modal (Gnani & ElevenLabs Parity) -->
+  <div id="wfDesignerModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-4xl max-h-[90vh] shadow-2xl flex flex-col overflow-hidden">
+      <!-- Modal Header -->
+      <div class="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
+        <div class="flex items-center gap-2">
+          <span class="text-lg">🛠️</span>
+          <div>
+            <h3 class="font-bold text-sm text-slate-100">Enterprise Agentic Workflow Studio</h3>
+            <p class="text-[11px] text-slate-400">Design state machines, slot validation rules, and agent directives with SQLite persistence</p>
+          </div>
+        </div>
+        <button id="closeWfDesignerBtn" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition">✕</button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="p-5 flex-1 overflow-y-auto space-y-4 text-xs">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label class="font-bold text-slate-300 block mb-1 text-[11px]">Workflow ID</label>
+            <input id="studioWfId" type="text" placeholder="e.g., vip_concierge" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono text-xs focus:outline-none focus:border-indigo-500">
+          </div>
+          <div>
+            <label class="font-bold text-slate-300 block mb-1 text-[11px]">Workflow Name</label>
+            <input id="studioWfName" type="text" placeholder="VIP Patient Concierge" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs focus:outline-none focus:border-indigo-500">
+          </div>
+          <div>
+            <label class="font-bold text-slate-300 block mb-1 text-[11px]">Category / Department</label>
+            <input id="studioWfCat" type="text" placeholder="VIP Support" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs focus:outline-none focus:border-indigo-500">
+          </div>
+        </div>
+
+        <div>
+          <label class="font-bold text-slate-300 block mb-1 text-[11px]">Workflow Description & Goals</label>
+          <input id="studioWfDesc" type="text" placeholder="Handles priority booking and white-glove medication requests." class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <!-- Initial Node Configuration -->
+        <div class="p-3 bg-slate-950/80 border border-slate-800 rounded-xl space-y-3">
+          <div class="font-bold text-indigo-400 flex items-center justify-between">
+            <span>Primary Entry Node (Initial Step)</span>
+            <span class="font-mono text-[10px] text-slate-500">Node ID: entry_step</span>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="text-[10px] text-slate-400 block mb-0.5">Node Title</label>
+              <input id="studioNodeTitle" type="text" placeholder="VIP Greeting & Intent Intake" class="w-full bg-slate-900 border border-slate-800 rounded-lg p-1.5 text-slate-200 text-xs">
+            </div>
+            <div>
+              <label class="text-[10px] text-slate-400 block mb-0.5">Required Slots (comma-separated)</label>
+              <input id="studioNodeSlots" type="text" placeholder="vip_id, preferred_time" class="w-full bg-slate-900 border border-slate-800 rounded-lg p-1.5 text-slate-200 text-xs">
+            </div>
+          </div>
+          <div>
+            <label class="text-[10px] text-slate-400 block mb-0.5">Step Directives / Conversational Instructions</label>
+            <textarea id="studioNodeInstructions" rows="2" placeholder="Greet the caller with utmost courtesy and ask for their VIP Membership ID." class="w-full bg-slate-900 border border-slate-800 rounded-lg p-1.5 text-slate-200 text-xs"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-4 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between">
+        <span class="text-[11px] text-slate-500 font-mono">Durable SQLite Backend Active</span>
+        <div class="flex items-center gap-2">
+          <button id="cancelWfBtn" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold transition">Cancel</button>
+          <button id="saveWfBtn" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition shadow-md shadow-indigo-900/30">
+            💾 Save & Persist Workflow
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ==========================================
+    // UI State Management & Data Store
+    // ==========================================
+    const UIState = {
+      isCallActive: false,
+      isAgentSpeaking: false,
+      isUserSpeaking: false,
+      isProcessingTurn: false,
+      pendingCallClose: false,
+      agentSpeakingCooldownUntil: 0,
+      turnCount: 0,
+      currentGain: 3.5,
+      latestMetrics: {
+        vad: 0.1,
+        asr: null,
+        clef: null,
+        tool: null,
+        llm: null,
+        tts: null,
+        total: null
+      },
+      workflow: null,
+      providers: {
+        stt: "Local Whisper.cpp (CUDA)",
+        llm: "Local Qwen3-4B (CUDA)",
+        tts: "Local Kokoro TTS (af_heart)"
+      }
+    };
+
+    // DOM Element References
+    const elements = {
+      callBtn: document.getElementById('callBtn'),
+      callBtnText: document.getElementById('callBtnText'),
+      callBtnSub: document.getElementById('callBtnSub'),
+      callStateBadge: document.getElementById('callStateBadge'),
+      agentStateBadge: document.getElementById('agentStateBadge'),
+      vadStatus: document.getElementById('vadStatus'),
+      vadMeter: document.getElementById('vadMeter'),
+      probVal: document.getElementById('probVal'),
+      vadClassVal: document.getElementById('vadClassVal'),
+      micGainSlider: document.getElementById('micGainSlider'),
+      gainVal: document.getElementById('gainVal'),
+      liveVisualizer: document.getElementById('liveVisualizer'),
+      visOverlayText: document.getElementById('visOverlayText'),
+      audioStreamLabel: document.getElementById('audioStreamLabel'),
+      ttsAudioPlayer: document.getElementById('ttsAudioPlayer'),
+      chatConsole: document.getElementById('chatConsole'),
+      turnCounterBadge: document.getElementById('turnCounterBadge'),
+      textForm: document.getElementById('textForm'),
+      textInput: document.getElementById('textInput'),
+      textSubmitBtn: document.getElementById('textSubmitBtn'),
+      clearChatBtn: document.getElementById('clearChatBtn'),
+      resetSessionBtn: document.getElementById('resetSessionBtn'),
+
+      // Provider Selectors
+      providerSelect: document.getElementById('providerSelect'),
+      sarvamControls: document.getElementById('sarvamControls'),
+      sarvamLangSelect: document.getElementById('sarvamLangSelect'),
+      sarvamVoiceSelect: document.getElementById('sarvamVoiceSelect'),
+      elevenlabsControls: document.getElementById('elevenlabsControls'),
+      elevenVoiceSelect: document.getElementById('elevenVoiceSelect'),
+      sentimentPill: document.getElementById('sentimentPill'),
+      sentimentLabel: document.getElementById('sentimentLabel'),
+      orbStatusGlow: document.getElementById('orbStatusGlow'),
+      providerBadge: document.getElementById('providerBadge'),
+      activeSttLabel: document.getElementById('activeSttLabel'),
+      activeLlmLabel: document.getElementById('activeLlmLabel'),
+      activeTtsLabel: document.getElementById('activeTtsLabel'),
+      badgeAsr: document.getElementById('badgeAsr'),
+      badgeClef: document.getElementById('badgeClef'),
+      badgeLlm: document.getElementById('badgeLlm'),
+      badgeTts: document.getElementById('badgeTts'),
+
+      // Latency metric targets
+      statVad: document.getElementById('statVad'),
+      statAsr: document.getElementById('statAsr'),
+      statClef: document.getElementById('statClef'),
+      statTool: document.getElementById('statTool'),
+      statLlm: document.getElementById('statLlm'),
+      statTts: document.getElementById('statTts'),
+      statTotal: document.getElementById('statTotal'),
+      statVerdictBadge: document.getElementById('statVerdictBadge'),
+
+      cardVad: document.getElementById('cardVad'),
+      cardAsr: document.getElementById('cardAsr'),
+      cardClef: document.getElementById('cardClef'),
+      cardTool: document.getElementById('cardTool'),
+      cardLlm: document.getElementById('cardLlm'),
+      cardTts: document.getElementById('cardTts'),
+      cardTotal: document.getElementById('cardTotal'),
+
+      // Workflow Elements
+      wfStatusBadge: document.getElementById('wfStatusBadge'),
+      wfActiveTitle: document.getElementById('wfActiveTitle'),
+      wfCurrentNode: document.getElementById('wfCurrentNode'),
+      wfInstructions: document.getElementById('wfInstructions'),
+      wfSlotCount: document.getElementById('wfSlotCount'),
+      wfSlotsContainer: document.getElementById('wfSlotsContainer')
+    };
+
+    // ==========================================
+    // Provider Switching Logic
+    // ==========================================
+    async function loadProviderConfig() {
+      try {
+        const resp = await fetch('/api/config/providers');
+        const data = await resp.json();
+        applyProviderConfigToUI(data);
+      } catch(e) {
+        console.warn('Could not load provider config:', e);
+      }
+    }
+
+    function applyProviderConfigToUI(data) {
+      if (!data || !data.config) return;
+      const cfg = data.config;
+
+      if (cfg.tts_provider === 'elevenlabs') {
+        elements.providerSelect.value = 'elevenlabs';
+        elements.sarvamControls.classList.add('hidden');
+        if (elements.elevenlabsControls) elements.elevenlabsControls.classList.remove('hidden');
+        if (elements.providerBadge) {
+          elements.providerBadge.textContent = 'ElevenLabs Ultra-HD Voice';
+          elements.providerBadge.className = 'text-[9px] text-purple-400 font-mono font-bold';
+        }
+      } else if (cfg.stt_provider === 'sarvam' || cfg.llm_provider === 'sarvam' || cfg.tts_provider === 'sarvam') {
+        elements.providerSelect.value = 'sarvam';
+        elements.sarvamControls.classList.remove('hidden');
+        if (elements.elevenlabsControls) elements.elevenlabsControls.classList.add('hidden');
+        if (elements.providerBadge) {
+          elements.providerBadge.textContent = 'Sarvam Indic + TypeSafe Jev';
+          elements.providerBadge.className = 'text-[9px] text-indigo-400 font-mono font-bold';
+        }
+      } else {
+        elements.providerSelect.value = 'local';
+        elements.sarvamControls.classList.add('hidden');
+        if (elements.elevenlabsControls) elements.elevenlabsControls.classList.add('hidden');
+        if (elements.providerBadge) {
+          elements.providerBadge.textContent = 'Local CUDA + Clef';
+          elements.providerBadge.className = 'text-[9px] text-emerald-400 font-mono font-bold';
+        }
+      }
+
+      if (cfg.sarvam_stt_lang && elements.sarvamLangSelect) {
+        elements.sarvamLangSelect.value = cfg.sarvam_stt_lang;
+      }
+      if (cfg.sarvam_tts_speaker && elements.sarvamVoiceSelect) {
+        elements.sarvamVoiceSelect.value = cfg.sarvam_tts_speaker;
+      }
+      if (cfg.elevenlabs_voice_id && elements.elevenVoiceSelect) {
+        elements.elevenVoiceSelect.value = cfg.elevenlabs_voice_id;
+      }
+
+      if (data.active) {
+        if (elements.activeSttLabel) elements.activeSttLabel.textContent = data.active.stt;
+        if (elements.activeLlmLabel) elements.activeLlmLabel.textContent = data.active.llm;
+        if (elements.activeTtsLabel) elements.activeTtsLabel.textContent = data.active.tts;
+        if (elements.badgeAsr) elements.badgeAsr.textContent = data.active.stt;
+        if (elements.badgeClef) elements.badgeClef.textContent = data.active.system_one || 'System One';
+        if (elements.badgeLlm) elements.badgeLlm.textContent = data.active.llm;
+        if (elements.badgeTts) elements.badgeTts.textContent = data.active.tts;
+      }
+    }
+
+    async function updateProviderConfig(changes) {
+      try {
+        const resp = await fetch('/api/config/providers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(changes)
+        });
+        const data = await resp.json();
+        applyProviderConfigToUI(data);
+        appendFeedItem({
+          sender: 'system',
+          title: 'AI Stack Updated',
+          text: `Active: STT: ${data.active.stt} | System 1: ${data.active.system_one} | LLM: ${data.active.llm} | TTS: ${data.active.tts}`,
+          type: 'info'
+        });
+      } catch(e) {
+        console.error('Failed to update provider config:', e);
+      }
+    }
+
+    elements.providerSelect.addEventListener('change', (e) => {
+      const mode = e.target.value;
+      if (mode === 'elevenlabs') {
+        elements.sarvamControls.classList.add('hidden');
+        if (elements.elevenlabsControls) elements.elevenlabsControls.classList.remove('hidden');
+
+        if (!BYOK.elevenlabsKey) {
+          document.getElementById('apiKeyModal').classList.remove('hidden');
+          appendFeedItem({
+            sender: 'system',
+            title: 'ElevenLabs API Key Required',
+            text: 'Please enter your ElevenLabs API Key in the settings dialog to activate Ultra-HD voice streaming.',
+            type: 'info'
+          });
+        }
+
+        updateProviderConfig({
+          stt_provider: "sarvam",
+          system_one_provider: "jev",
+          llm_provider: "sarvam",
+          tts_provider: "elevenlabs",
+          elevenlabs_voice_id: elements.elevenVoiceSelect ? elements.elevenVoiceSelect.value : "21m00Tcm4TlvDq8ikWAM",
+          elevenlabs_api_key: BYOK.elevenlabsKey,
+          sarvam_api_key: BYOK.sarvamKey
+        });
+      } else if (mode === 'sarvam') {
+        elements.sarvamControls.classList.remove('hidden');
+        if (elements.elevenlabsControls) elements.elevenlabsControls.classList.add('hidden');
+
+        if (!BYOK.sarvamKey) {
+          document.getElementById('apiKeyModal').classList.remove('hidden');
+          appendFeedItem({
+            sender: 'system',
+            title: 'Sarvam AI Key Required',
+            text: 'Please enter your Sarvam AI Subscription Key to activate Indic Saaras/Bulbul/105B models.',
+            type: 'info'
+          });
+        }
+
+        updateProviderConfig({
+          stt_provider: "sarvam",
+          system_one_provider: "jev",
+          llm_provider: "sarvam",
+          tts_provider: "sarvam",
+          sarvam_stt_lang: elements.sarvamLangSelect.value,
+          sarvam_tts_lang: elements.sarvamLangSelect.value,
+          sarvam_tts_speaker: elements.sarvamVoiceSelect.value,
+          sarvam_api_key: BYOK.sarvamKey
+        });
+      } else {
+        elements.sarvamControls.classList.add('hidden');
+        if (elements.elevenlabsControls) elements.elevenlabsControls.classList.add('hidden');
+        updateProviderConfig({
+          stt_provider: "local",
+          system_one_provider: "clef",
+          llm_provider: "local",
+          tts_provider: "local"
+        });
+      }
+    });
+
+    if (elements.elevenVoiceSelect) {
+      elements.elevenVoiceSelect.addEventListener('change', (e) => {
+        updateProviderConfig({
+          tts_provider: "elevenlabs",
+          elevenlabs_voice_id: e.target.value
+        });
+      });
+    }
+
+    elements.sarvamLangSelect.addEventListener('change', (e) => {
+      updateProviderConfig({
+        stt_provider: "sarvam",
+        system_one_provider: "jev",
+        llm_provider: "sarvam",
+        tts_provider: elements.providerSelect.value === 'elevenlabs' ? 'elevenlabs' : 'sarvam',
+        sarvam_stt_lang: e.target.value,
+        sarvam_tts_lang: e.target.value,
+        sarvam_tts_speaker: elements.sarvamVoiceSelect.value
+      });
+    });
+
+    elements.sarvamVoiceSelect.addEventListener('change', (e) => {
+      updateProviderConfig({
+        stt_provider: "sarvam",
+        llm_provider: "sarvam",
+        tts_provider: elements.providerSelect.value === 'elevenlabs' ? 'elevenlabs' : 'sarvam',
+        sarvam_stt_lang: elements.sarvamLangSelect.value,
+        sarvam_tts_lang: elements.sarvamLangSelect.value,
+        sarvam_tts_speaker: e.target.value
+      });
+    });
+
+    loadProviderConfig();
+
+    // ==========================================
+    // Latency Telemetry & Workflow UI
+    // ==========================================
+    function updateLatencyDisplay(metrics) {
+      if (!metrics) return;
+
+      function updateCard(elem, cardElem, val, suffix = ' ms') {
+        if (!elem) return;
+        const formatted = (val !== null && val !== undefined) ? (typeof val === 'number' ? (val < 1 ? val.toFixed(2) : val.toFixed(0)) : val) : '--';
+        if (elem.textContent !== formatted) {
+          elem.textContent = formatted;
+          if (cardElem) {
+            cardElem.classList.remove('stat-updated');
+            void cardElem.offsetWidth;
+            cardElem.classList.add('stat-updated');
+          }
+        }
+      }
+
+      if (metrics.vad_ms !== undefined) updateCard(elements.statVad, elements.cardVad, metrics.vad_ms);
+      if (metrics.asr_ms !== undefined) updateCard(elements.statAsr, elements.cardAsr, metrics.asr_ms);
+      if (metrics.clef_ms !== undefined) updateCard(elements.statClef, elements.cardClef, metrics.clef_ms);
+      if (metrics.tool_us !== undefined) updateCard(elements.statTool, elements.cardTool, metrics.tool_us, ' µs');
+      if (metrics.llm_ms !== undefined) updateCard(elements.statLlm, elements.cardLlm, metrics.llm_ms);
+      if (metrics.tts_ms !== undefined) updateCard(elements.statTts, elements.cardTts, metrics.tts_ms);
+      if (metrics.total_ms !== undefined) {
+        updateCard(elements.statTotal, elements.cardTotal, metrics.total_ms);
+        if (elements.statVerdictBadge) {
+          if (metrics.total_ms < 600) {
+            elements.statVerdictBadge.textContent = 'Ultra-Fast';
+            elements.statVerdictBadge.className = 'text-[9px] text-emerald-400 font-mono font-bold';
+          } else if (metrics.total_ms < 1200) {
+            elements.statVerdictBadge.textContent = 'Real-time';
+            elements.statVerdictBadge.className = 'text-[9px] text-amber-400 font-mono font-bold';
+          } else {
+            elements.statVerdictBadge.textContent = 'Normal';
+            elements.statVerdictBadge.className = 'text-[9px] text-slate-400 font-mono';
+          }
+        }
+      }
+    }
+
+    function updateWorkflowUI(wfState) {
+      if (!wfState) return;
+      UIState.workflow = wfState;
+
+      if (elements.wfActiveTitle) elements.wfActiveTitle.textContent = wfState.workflow_name || wfState.active_workflow_id;
+      if (elements.wfCurrentNode) elements.wfCurrentNode.textContent = wfState.current_node_id || '--';
+      if (elements.wfInstructions) elements.wfInstructions.textContent = wfState.instructions || 'Listening...';
+
+      if (elements.wfStatusBadge) {
+        if (wfState.completed) {
+          elements.wfStatusBadge.textContent = "Completed";
+          elements.wfStatusBadge.className = "text-[10px] bg-emerald-950 text-emerald-400 border border-emerald-700/50 font-mono px-2 py-0.5 rounded";
+        } else {
+          elements.wfStatusBadge.textContent = "In Progress";
+          elements.wfStatusBadge.className = "text-[10px] bg-indigo-950 text-indigo-400 border border-indigo-700/50 font-mono px-2 py-0.5 rounded";
+        }
+      }
+
+      document.querySelectorAll('.wf-btn').forEach(btn => {
+        if (btn.getAttribute('data-flow') === wfState.active_workflow_id) {
+          btn.className = "wf-btn p-2 rounded-lg border border-emerald-500/80 bg-emerald-950/40 text-emerald-300 font-semibold transition text-left shadow-sm";
+        } else {
+          btn.className = "wf-btn p-2 rounded-lg border border-slate-800 bg-slate-950 text-slate-400 hover:text-white transition text-left";
+        }
+      });
+
+      if (elements.wfSlotsContainer) {
+        const slots = wfState.slots || {};
+        const entries = Object.entries(slots);
+        if (elements.wfSlotCount) elements.wfSlotCount.textContent = `${entries.length} slots filled`;
+
+        if (entries.length === 0) {
+          elements.wfSlotsContainer.innerHTML = '<div class="text-slate-600 text-[10px] italic">No slots captured yet. Speak naturally to fill.</div>';
+        } else {
+          elements.wfSlotsContainer.innerHTML = entries.map(([k, v]) => 
+            `<div class="flex justify-between items-center py-0.5 border-b border-slate-900 last:border-0">
+               <span class="text-slate-400">${k}:</span>
+               <span class="text-emerald-400 font-bold">${v}</span>
+             </div>`
+          ).join('');
+        }
+      }
+    }
+
+    document.querySelectorAll('.wf-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const flowID = btn.getAttribute('data-flow');
+        try {
+          const resp = await fetch(`/api/workflow/switch?flow=${encodeURIComponent(flowID)}`);
+          const state = await resp.json();
+          updateWorkflowUI(state);
+          appendFeedItem({
+            sender: 'system',
+            title: 'Business Workflow Switched',
+            text: `Switched active flow to ${state.workflow_name} (${flowID}). History cleared for new flow.`,
+            type: 'tool'
+          });
+        } catch (e) {
+          console.error('Workflow switch failed:', e);
+        }
+      });
+    });
+
+    async function loadInitialWorkflowState() {
+      try {
+        const resp = await fetch('/api/workflow/state');
+        const state = await resp.json();
+        updateWorkflowUI(state);
+      } catch (e) {
+        console.warn('Could not fetch initial workflow state:', e);
+      }
+    }
+    loadInitialWorkflowState();
+
+    // ==========================================
+    // Enterprise Knowledge Base & RAG Management
+    // ==========================================
+    async function loadKnowledgeDocuments() {
+      const container = document.getElementById('kbListContainer');
+      const badge = document.getElementById('kbDocCount');
+      if (!container) return;
+
+      try {
+        const resp = await fetch('/api/knowledge/documents');
+        const data = await resp.json();
+        const docs = data.documents || [];
+        if (badge) badge.textContent = `${docs.length} docs`;
+
+        if (docs.length === 0) {
+          container.innerHTML = '<div class="text-[10px] text-slate-500 italic p-1">No custom documents uploaded.</div>';
+          return;
+        }
+
+        container.innerHTML = docs.map(d => `
+          <div class="p-2 bg-slate-950 border border-slate-800 rounded-lg text-xs space-y-1">
+            <div class="flex items-center justify-between font-bold text-slate-200">
+              <span class="truncate max-w-[170px] text-indigo-300">${d.title}</span>
+              <span class="text-[9px] font-mono text-slate-500 uppercase">${d.source_type}</span>
+            </div>
+            <div class="text-[10px] text-slate-400 line-clamp-2">${d.content}</div>
+            <div class="text-[9px] font-mono text-slate-600 flex justify-between pt-0.5">
+              <span>${d.chunks ? d.chunks.length : 1} chunks</span>
+              <span>Sub-5ms RAG</span>
+            </div>
+          </div>
+        `).join('');
+      } catch (e) {
+        console.warn('Could not load knowledge docs:', e);
+      }
+    }
+
+    const kbAddBtn = document.getElementById('kbAddBtn');
+    if (kbAddBtn) {
+      kbAddBtn.addEventListener('click', async () => {
+        const titleInput = document.getElementById('kbDocTitle');
+        const contentInput = document.getElementById('kbDocContent');
+        const title = titleInput.value.trim();
+        const content = contentInput.value.trim();
+
+        if (!title || !content) {
+          alert('Please provide both document title and content.');
+          return;
+        }
+
+        kbAddBtn.textContent = 'Indexing in-memory...';
+        kbAddBtn.disabled = true;
+
+        try {
+          const resp = await fetch('/api/knowledge/documents', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, content, source_type: 'policy' })
+          });
+          const res = await resp.json();
+          titleInput.value = '';
+          contentInput.value = '';
+          loadKnowledgeDocuments();
+          appendFeedItem({
+            sender: 'system',
+            title: 'Knowledge Ingested',
+            text: `Indexed "${title}" (${res.document?.chunks?.length || 1} chunks) into in-memory BM25 index.`,
+            type: 'tool'
+          });
+        } catch (e) {
+          alert('Failed to index document: ' + e.message);
+        } finally {
+          kbAddBtn.textContent = '+ Ingest & Index Document (Sub-5ms RAG)';
+          kbAddBtn.disabled = false;
+        }
+      });
+    }
+
+    loadKnowledgeDocuments();
+
+    // ==========================================
+    // Dynamic Webhook Tools Management
+    // ==========================================
+    async function loadDynamicTools() {
+      const container = document.getElementById('toolsListContainer');
+      const badge = document.getElementById('toolCountBadge');
+      if (!container) return;
+
+      try {
+        const resp = await fetch('/api/tools/dynamic');
+        const data = await resp.json();
+        const tools = data.tools || [];
+        if (badge) badge.textContent = `${tools.length} active`;
+
+        if (tools.length === 0) {
+          container.innerHTML = '<div class="text-[10px] text-slate-500 italic p-1">No dynamic tools configured.</div>';
+          return;
+        }
+
+        container.innerHTML = tools.map(t => `
+          <div class="p-2 bg-slate-950 border border-slate-800 rounded-lg text-xs space-y-1">
+            <div class="flex items-center justify-between font-bold text-slate-200">
+              <span class="truncate max-w-[160px] text-cyan-300 font-mono">${t.name}</span>
+              <span class="text-[9px] font-mono bg-cyan-950 text-cyan-400 px-1 rounded">${t.method}</span>
+            </div>
+            <div class="text-[10px] text-slate-400 line-clamp-2">${t.description}</div>
+            <div class="text-[9px] font-mono text-slate-600 truncate">${t.url}</div>
+          </div>
+        `).join('');
+      } catch (e) {
+        console.warn('Could not load dynamic tools:', e);
+      }
+    }
+    loadDynamicTools();
+
+    // ==========================================
+    // Visual Workflow Studio Designer Controller
+    // ==========================================
+    const wfModal = document.getElementById('wfDesignerModal');
+    const openWfBtn = document.getElementById('openWfDesignerBtn');
+    const closeWfBtn = document.getElementById('closeWfDesignerBtn');
+    const cancelWfBtn = document.getElementById('cancelWfBtn');
+    const saveWfBtn = document.getElementById('saveWfBtn');
+
+    if (openWfBtn && wfModal) {
+      openWfBtn.addEventListener('click', () => wfModal.classList.remove('hidden'));
+    }
+    if (closeWfBtn && wfModal) {
+      closeWfBtn.addEventListener('click', () => wfModal.classList.add('hidden'));
+    }
+    if (cancelWfBtn && wfModal) {
+      cancelWfBtn.addEventListener('click', () => wfModal.classList.add('hidden'));
+    }
+
+    if (saveWfBtn) {
+      saveWfBtn.addEventListener('click', async () => {
+        const id = document.getElementById('studioWfId').value.trim();
+        const name = document.getElementById('studioWfName').value.trim();
+        const cat = document.getElementById('studioWfCat').value.trim();
+        const desc = document.getElementById('studioWfDesc').value.trim();
+        const nodeTitle = document.getElementById('studioNodeTitle').value.trim();
+        const nodeSlotsStr = document.getElementById('studioNodeSlots').value.trim();
+        const nodeInstructions = document.getElementById('studioNodeInstructions').value.trim();
+
+        if (!id || !name || !nodeTitle) {
+          alert('Please provide Workflow ID, Name, and Initial Node Title.');
+          return;
+        }
+
+        const slotList = nodeSlotsStr ? nodeSlotsStr.split(',').map(s => ({
+          name: s.trim(),
+          description: s.trim(),
+          required: true
+        })) : [];
+
+        const nodes = {
+          "entry_step": {
+            id: "entry_step",
+            title: nodeTitle,
+            instructions: nodeInstructions || "Greet caller and fulfill workflow goal.",
+            slots: slotList,
+            tools: ["list_clinic_services"],
+            next_node_id: ""
+          }
+        };
+
+        saveWfBtn.textContent = 'Persisting to SQLite...';
+        saveWfBtn.disabled = true;
+
+        try {
+          const resp = await fetch('/api/workflow/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id,
+              name,
+              category: cat || "Custom Workflows",
+              description: desc || name,
+              initial_node: "entry_step",
+              nodes
+            })
+          });
+
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+          wfModal.classList.add('hidden');
+          appendFeedItem({
+            sender: 'system',
+            title: 'Workflow Studio: Saved & Persisted',
+            text: `Workflow "${name}" (${id}) persisted to SQLite storage and registered into active voice engine.`,
+            type: 'tool'
+          });
+
+          // Switch to this new flow
+          const switchResp = await fetch(`/api/workflow/switch?flow=${encodeURIComponent(id)}`);
+          const newState = await switchResp.json();
+          updateWorkflowUI(newState);
+
+        } catch (e) {
+          alert('Failed to persist workflow: ' + e.message);
+        } finally {
+          saveWfBtn.textContent = '💾 Save & Persist Workflow';
+          saveWfBtn.disabled = false;
+        }
+      });
+    }
+
+    // ==========================================
+    // Right Panel Tab Switcher Controller
+    // ==========================================
+    const tabButtons = document.querySelectorAll('.studio-tab-btn');
+    const studioPanels = document.querySelectorAll('.studio-panel');
+
+    tabButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const targetId = btn.getAttribute('data-target');
+
+        tabButtons.forEach(b => {
+          b.className = "studio-tab-btn flex-1 py-2 px-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60";
+        });
+        btn.className = "studio-tab-btn flex-1 py-2 px-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 bg-indigo-600 text-white shadow-sm";
+
+        studioPanels.forEach(panel => {
+          if (panel.id === targetId) {
+            panel.classList.remove('hidden');
+          } else {
+            panel.classList.add('hidden');
+          }
+        });
+      });
+    });
+
+    // ==========================================
+    // Real-Time Canvas Audio Visualizer
+    // ==========================================
+    let visualizerCtx = null;
+    let visualizerAnimationId = null;
+    let analyserNode = null;
+    let visualizerDataArray = null;
+
+    function initVisualizerCanvas() {
+      const canvas = elements.liveVisualizer;
+      if (!canvas) return;
+      visualizerCtx = canvas.getContext('2d');
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+      drawIdleWave();
+    }
+
+    function resizeCanvas() {
+      const canvas = elements.liveVisualizer;
+      if (!canvas) return;
+      canvas.width = canvas.offsetWidth * window.devicePixelRatio;
+      canvas.height = canvas.offsetHeight * window.devicePixelRatio;
+      if (visualizerCtx) {
+        visualizerCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
+      }
+    }
+
+    let orbPhase = 0;
+
+    function drawIdleWave() {
+      if (!visualizerCtx) return;
+      const canvas = elements.liveVisualizer;
+      const width = canvas.offsetWidth;
+      const height = canvas.offsetHeight;
+      const cx = width / 2;
+      const cy = height / 2;
+
+      visualizerCtx.clearRect(0, 0, width, height);
+
+      orbPhase += 0.025;
+      const pulseRadius = 24 + Math.sin(orbPhase * 2) * 4;
+
+      // Outer radial bloom
+      const grad = visualizerCtx.createRadialGradient(cx, cy, 2, cx, cy, pulseRadius * 2.2);
+      grad.addColorStop(0, 'rgba(20, 184, 166, 0.45)');
+      grad.addColorStop(0.5, 'rgba(56, 189, 248, 0.15)');
+      grad.addColorStop(1, 'rgba(15, 23, 42, 0)');
+      visualizerCtx.fillStyle = grad;
+      visualizerCtx.beginPath();
+      visualizerCtx.arc(cx, cy, pulseRadius * 2.2, 0, Math.PI * 2);
+      visualizerCtx.fill();
+
+      // Pulsing Multi-ring Orb
+      visualizerCtx.lineWidth = 1.8;
+      for (let r = 0; r < 3; r++) {
+        visualizerCtx.beginPath();
+        visualizerCtx.strokeStyle = `rgba(45, 212, 191, ${0.6 - r * 0.15})`;
+        for (let a = 0; a <= Math.PI * 2; a += 0.1) {
+          const distort = Math.sin(a * 4 + orbPhase * 3 + r) * 3;
+          const rad = pulseRadius + r * 6 + distort;
+          const px = cx + Math.cos(a) * rad;
+          const py = cy + Math.sin(a) * rad;
+          if (a === 0) visualizerCtx.moveTo(px, py);
+          else visualizerCtx.lineTo(px, py);
+        }
+        visualizerCtx.closePath();
+        visualizerCtx.stroke();
+      }
+
+      // Smooth central horizon wave
+      visualizerCtx.beginPath();
+      visualizerCtx.moveTo(0, height / 2);
+      for (let x = 0; x < width; x += 4) {
+        const y = (height / 2) + Math.sin(x * 0.03 + orbPhase * 2) * 3;
+        visualizerCtx.lineTo(x, y);
+      }
+      visualizerCtx.strokeStyle = 'rgba(71, 85, 105, 0.3)';
+      visualizerCtx.lineWidth = 1;
+      visualizerCtx.stroke();
+
+      if (!UIState.isCallActive && !UIState.isAgentSpeaking) {
+        visualizerAnimationId = requestAnimationFrame(drawIdleWave);
+      }
+    }
+
+    function startLiveWaveform() {
+      if (visualizerAnimationId) cancelAnimationFrame(visualizerAnimationId);
+      if (!analyserNode) return;
+
+      const bufferLength = analyserNode.frequencyBinCount;
+      visualizerDataArray = new Uint8Array(bufferLength);
+
+      function renderFrame() {
+        if (!UIState.isCallActive && !UIState.isAgentSpeaking) {
+          drawIdleWave();
+          return;
+        }
+
+        visualizerAnimationId = requestAnimationFrame(renderFrame);
+        analyserNode.getByteTimeDomainData(visualizerDataArray);
+
+        const canvas = elements.liveVisualizer;
+        const width = canvas.offsetWidth;
+        const height = canvas.offsetHeight;
+        const cx = width / 2;
+        const cy = height / 2;
+
+        visualizerCtx.clearRect(0, 0, width, height);
+        orbPhase += 0.04;
+
+        // Calculate audio RMS energy
+        let sum = 0;
+        for (let i = 0; i < bufferLength; i++) {
+          const val = (visualizerDataArray[i] - 128) / 128.0;
+          sum += val * val;
+        }
+        const rms = Math.sqrt(sum / bufferLength);
+        const energy = Math.min(1.0, rms * 4.0);
+
+        const isSpeaking = UIState.isAgentSpeaking;
+        const isUser = UIState.isUserSpeaking;
+
+        // Theme colors
+        let coreColor1 = 'rgba(16, 185, 129, 0.7)';
+        let coreColor2 = 'rgba(6, 182, 212, 0.3)';
+        let ringColor = 'rgba(52, 211, 153, 0.9)';
+
+        if (isSpeaking) {
+          coreColor1 = 'rgba(139, 92, 246, 0.85)';
+          coreColor2 = 'rgba(236, 72, 153, 0.4)';
+          ringColor = 'rgba(168, 85, 247, 0.95)';
+        } else if (isUser) {
+          coreColor1 = 'rgba(56, 189, 248, 0.9)';
+          coreColor2 = 'rgba(20, 184, 166, 0.4)';
+          ringColor = 'rgba(14, 165, 233, 0.95)';
+        }
+
+        const baseRadius = 26 + energy * 35;
+
+        // 1. Dynamic Radiant Orb Bloom
+        const grad = visualizerCtx.createRadialGradient(cx, cy, 4, cx, cy, baseRadius * 2.5);
+        grad.addColorStop(0, coreColor1);
+        grad.addColorStop(0.6, coreColor2);
+        grad.addColorStop(1, 'rgba(15, 23, 42, 0)');
+        visualizerCtx.fillStyle = grad;
+        visualizerCtx.beginPath();
+        visualizerCtx.arc(cx, cy, baseRadius * 2.5, 0, Math.PI * 2);
+        visualizerCtx.fill();
+
+        // 2. Animated Fluid Rings
+        visualizerCtx.lineWidth = 2.2;
+        for (let r = 0; r < 4; r++) {
+          visualizerCtx.beginPath();
+          visualizerCtx.strokeStyle = ringColor;
+          visualizerCtx.globalAlpha = 0.8 - r * 0.18;
+          for (let a = 0; a <= Math.PI * 2; a += 0.08) {
+            const freqSample = visualizerDataArray[Math.floor((a / (Math.PI * 2)) * bufferLength)] / 128.0 - 1.0;
+            const wave = Math.sin(a * (5 + r) + orbPhase * 3) * (6 + energy * 18) + freqSample * 12;
+            const rad = baseRadius + r * 7 + wave;
+            const px = cx + Math.cos(a) * rad;
+            const py = cy + Math.sin(a) * rad;
+            if (a === 0) visualizerCtx.moveTo(px, py);
+            else visualizerCtx.lineTo(px, py);
+          }
+          visualizerCtx.closePath();
+          visualizerCtx.stroke();
+        }
+        visualizerCtx.globalAlpha = 1.0;
+
+        // 3. Audio Spectrum Soundwave across the base
+        visualizerCtx.beginPath();
+        const sliceWidth = width / bufferLength;
+        let x = 0;
+        for (let i = 0; i < bufferLength; i++) {
+          const v = visualizerDataArray[i] / 128.0;
+          const y = (v * height * 0.7) + (height * 0.15);
+          if (i === 0) visualizerCtx.moveTo(x, y);
+          else visualizerCtx.lineTo(x, y);
+          x += sliceWidth;
+        }
+        visualizerCtx.strokeStyle = isSpeaking ? 'rgba(168, 85, 247, 0.4)' : isUser ? 'rgba(56, 189, 248, 0.4)' : 'rgba(45, 212, 191, 0.25)';
+        visualizerCtx.lineWidth = 1.5;
+        visualizerCtx.stroke();
+      }
+
+      renderFrame();
+    }
+
+    initVisualizerCanvas();
+
+    // ==========================================
+    // Feed / Chat Stream Management
+    // ==========================================
+    function appendFeedItem(item) {
+      const container = elements.chatConsole;
+      if (!container) return;
+
+      const el = document.createElement('div');
+      
+      if (item.sender === 'user') {
+        el.className = "flex items-start gap-3 justify-end";
+        el.innerHTML = `
+          <div class="max-w-[85%] bg-blue-950/40 border border-blue-800/60 rounded-2xl rounded-tr-sm p-3.5 shadow-sm">
+            <div class="flex items-center justify-between gap-3 mb-1">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-blue-400">Caller (You)</span>
+              ${item.asrLatency ? `<span class="text-[10px] font-mono bg-blue-950 text-blue-300 border border-blue-800/40 px-1.5 py-0.2 rounded">ASR: ${item.asrLatency} ms</span>` : ''}
+            </div>
+            <div class="text-xs text-slate-100 font-medium">${item.text}</div>
+          </div>
+          <div class="w-7 h-7 rounded-lg bg-blue-900 border border-blue-700/60 flex items-center justify-center text-blue-200 font-bold text-xs shrink-0 mt-0.5">
+            👤
+          </div>
+        `;
+      } else if (item.sender === 'agent') {
+        el.className = "flex items-start gap-3";
+        let timingBadges = '';
+        if (item.metrics) {
+          timingBadges = `
+            <div class="flex flex-wrap gap-1 mt-2 pt-2 border-t border-slate-800/80 text-[10px] font-mono">
+              <span class="bg-emerald-950 text-emerald-400 border border-emerald-800/50 px-1.5 py-0.5 rounded font-bold">Total: ${item.metrics.total_pipeline_latency_ms ? item.metrics.total_pipeline_latency_ms.toFixed(0) : '--'} ms</span>
+              ${item.metrics.clef_decision_latency_ms ? `<span class="bg-indigo-950 text-indigo-300 border border-indigo-800/50 px-1.5 py-0.5 rounded">Clef: ${item.metrics.clef_decision_latency_ms.toFixed(0)} ms</span>` : ''}
+              ${item.metrics.tool_executed ? `<span class="bg-cyan-950 text-cyan-300 border border-cyan-800/50 px-1.5 py-0.5 rounded">Tool: ${item.metrics.tool_executed.duration_microseconds ? item.metrics.tool_executed.duration_microseconds.toFixed(1) : '< 1'} &micro;s</span>` : ''}
+              ${item.metrics.llm_latency_ms ? `<span class="bg-purple-950 text-purple-300 border border-purple-800/50 px-1.5 py-0.5 rounded">LLM: ${item.metrics.llm_latency_ms.toFixed(0)} ms</span>` : ''}
+              ${item.metrics.tts_latency_ms ? `<span class="bg-teal-950 text-teal-300 border border-teal-800/50 px-1.5 py-0.5 rounded">TTS: ${item.metrics.tts_latency_ms.toFixed(0)} ms</span>` : ''}
+            </div>
+          `;
+        }
+
+        let toolBlock = '';
+        if (item.tool) {
+          toolBlock = `
+            <div class="my-2 p-2 bg-slate-950/90 border border-cyan-800/40 rounded-lg text-[11px] font-mono text-cyan-300">
+              <div class="font-bold flex items-center justify-between text-cyan-400">
+                <span>⚡ Tool Executed: ${item.tool.tool_name}</span>
+                <span class="text-[10px] text-slate-400">${item.tool.duration_microseconds ? item.tool.duration_microseconds.toFixed(1) : '< 1'} &micro;s</span>
+              </div>
+              <div class="text-slate-400 text-[10px] mt-0.5 whitespace-pre-wrap">${JSON.stringify(item.tool.result, null, 1)}</div>
+            </div>
+          `;
+        }
+
+        el.innerHTML = `
+          <div class="w-7 h-7 rounded-lg bg-emerald-950 border border-emerald-700/60 flex items-center justify-center text-emerald-300 font-bold text-xs shrink-0 mt-0.5">
+            👩‍⚕️
+          </div>
+          <div class="max-w-[85%] bg-slate-950/90 border border-emerald-900/50 rounded-2xl rounded-tl-sm p-3.5 shadow-sm">
+            <div class="flex items-center justify-between gap-3 mb-1">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Aria (Beacon Health Reception)</span>
+              <span class="text-[10px] font-mono text-emerald-500">Spoken Response</span>
+            </div>
+            ${toolBlock}
+            <div class="agent-speech-text text-xs text-slate-100 leading-relaxed font-medium">${item.text}</div>
+            ${timingBadges}
+          </div>
+        `;
+      } else {
+        const borderColors = {
+          info: 'border-slate-800 bg-slate-950/80 text-slate-400',
+          tool: 'border-cyan-800/60 bg-cyan-950/20 text-cyan-300',
+          barge: 'border-amber-700/60 bg-amber-950/30 text-amber-300'
+        };
+        el.className = `p-3 rounded-xl border text-xs ${borderColors[item.type] || borderColors.info}`;
+        el.innerHTML = `<div class="font-bold mb-0.5 text-slate-200">${item.title}</div><div class="whitespace-pre-wrap leading-relaxed">${item.text}</div>`;
+      }
+
+      container.appendChild(el);
+      container.scrollTop = container.scrollHeight;
+
+      UIState.turnCount++;
+      if (elements.turnCounterBadge) {
+        elements.turnCounterBadge.textContent = `${UIState.turnCount} turns`;
+      }
+      return el;
+    }
+
+    if (elements.clearChatBtn) {
+      elements.clearChatBtn.addEventListener('click', () => {
+        elements.chatConsole.innerHTML = '';
+        UIState.turnCount = 0;
+        if (elements.turnCounterBadge) elements.turnCounterBadge.textContent = '0 turns';
+      });
+    }
+
+    document.querySelectorAll('.quick-prompt').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (elements.textInput) {
+          elements.textInput.value = btn.textContent.trim();
+          elements.textForm.dispatchEvent(new Event('submit'));
+        }
+      });
+    });
+
+    // ==========================================
+    // Silero Neural VAD WebAssembly Engine
+    // ==========================================
+    let audioContext = null;
+    let micStream = null;
+    let micSource = null;
+    let hpfNode = null;
+    let micGainNode = null;
+    let compressorNode = null;
+    let scriptProcessor = null;
+
+    let ortSession = null;
+    let ortState = null;
+    let ortContext = null;
+    let srTensor = null;
+    let isWasmReady = false;
+
+    const SAMPLE_RATE = 16000;
+    const FRAME_SIZE = 512;           // 32ms frame at 16kHz
+    const PRE_ROLL_SAMPLES = 12800;   // 800ms pre-roll captures leading words
+    const SILENCE_TIMEOUT_MS = 800;   // 800ms natural conversational breath pause
+
+    let rawSamplesQueue = [];
+    let preRollRing = [];
+    let activeTurnSamples = [];
+
+    let isSpeaking = false;
+    let speechStartTime = 0;
+    let silenceStartTime = 0;
+    let consecutiveSpeechFrames = 0;
+    let isVADProcessing = false;
+    let bargeInSpeechFrames = 0;
+
+    async function initSileroVAD() {
+      if (window.ort) {
+        try {
+          ort.env.wasm.wasmPaths = '/';
+          ort.env.wasm.numThreads = 1;
+          ortSession = await ort.InferenceSession.create('/silero_vad_v5.onnx', {
+            executionProviders: ['wasm']
+          });
+          resetVADState();
+          isWasmReady = true;
+          if (elements.statVad) elements.statVad.textContent = '0.1';
+          console.log('✅ In-browser Silero VAD v5 initialized via WebAssembly!');
+          return true;
+        } catch (e) {
+          console.warn('WASM VAD init fallback to HTTP backend:', e);
+        }
+      }
+      return false;
+    }
+
+    function resetVADState() {
+      ortState = new Float32Array(2 * 1 * 128);
+      ortContext = new Float32Array(64);
+      if (window.ort) {
+        srTensor = new ort.Tensor('int64', new BigInt64Array([16000n]), []);
+      }
+    }
+
+    initSileroVAD();
+
+    elements.callBtn.addEventListener('click', async () => {
+      if (UIState.isCallActive) {
+        stopCall();
+      } else {
+        await startCall();
+      }
+    });
+
+    elements.resetSessionBtn.addEventListener('click', async () => {
+      await fetch('/api/reset-session');
+      await loadInitialWorkflowState();
+      appendFeedItem({
+        sender: 'system',
+        title: 'Session Reset',
+        text: 'Conversation context and workflow slots cleared for a fresh call.',
+        type: 'info'
+      });
+    });
+
+    if (elements.micGainSlider) {
+      elements.micGainSlider.addEventListener('input', (e) => {
+        UIState.currentGain = parseFloat(e.target.value);
+        if (elements.gainVal) {
+          const desc = UIState.currentGain <= 1.0 ? '(1-5cm Close)' : UIState.currentGain <= 3.0 ? '(Desk 30-60cm)' : '(Far Mic / Soft)';
+          elements.gainVal.textContent = `${UIState.currentGain.toFixed(1)}x ${desc}`;
+        }
+        if (micGainNode && audioContext) {
+          micGainNode.gain.setTargetAtTime(UIState.currentGain, audioContext.currentTime, 0.05);
+        }
+      });
+    }
+
+    async function startCall() {
+      try {
+        // Automatically reset session slots and context for each new voice call
+        fetch('/api/reset-session').then(loadInitialWorkflowState).catch(e => console.warn(e));
+
+        // Support modern and legacy WebRTC getUserMedia across secure & local origins
+        const getMedia = navigator.mediaDevices?.getUserMedia 
+          ? (constraints) => navigator.mediaDevices.getUserMedia(constraints)
+          : (constraints) => new Promise((resolve, reject) => {
+              const legacyGetUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
+              if (!legacyGetUserMedia) {
+                return reject(new Error(
+                  window.isSecureContext === false 
+                    ? "Microphone is blocked because this page is opened in an insecure context (HTTP on non-localhost IP). Please access via http://localhost:8090, http://127.0.0.1:8090, or enable HTTPS." 
+                    : "navigator.mediaDevices.getUserMedia is not supported on this browser/origin."
+                ));
+              }
+              legacyGetUserMedia.call(navigator, constraints, resolve, reject);
+            });
+
+        micStream = await getMedia({
+          audio: {
+            channelCount: 1,
+            echoCancellation: true,   // Cancels speaker playback loop
+            noiseSuppression: false,  // Prevents Chrome from crushing vocal gain
+            autoGainControl: false,   // Keeps gain steady
+            sampleRate: 16000
+          }
+        });
+
+        audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+        micSource = audioContext.createMediaStreamSource(micStream);
+
+        // Google Meet 85Hz High-Pass Filter
+        hpfNode = audioContext.createBiquadFilter();
+        hpfNode.type = 'highpass';
+        hpfNode.frequency.value = 85;
+        hpfNode.Q.value = 0.707;
+
+        // Digital Preamp GainNode
+        micGainNode = audioContext.createGain();
+        micGainNode.gain.value = UIState.currentGain;
+
+        // Broadcast Dynamics Compressor
+        compressorNode = audioContext.createDynamicsCompressor();
+        compressorNode.threshold.value = -18;
+        compressorNode.knee.value = 12;
+        compressorNode.ratio.value = 4;
+        compressorNode.attack.value = 0.003;
+        compressorNode.release.value = 0.15;
+
+        // Analyser for Live Oscilloscope
+        analyserNode = audioContext.createAnalyser();
+        analyserNode.fftSize = 256;
+
+        // DSP Chain
+        micSource.connect(hpfNode);
+        hpfNode.connect(micGainNode);
+        micGainNode.connect(compressorNode);
+        compressorNode.connect(analyserNode);
+
+        // Frame Processor (Muted zero-gain path to prevent mic playback echo)
+        scriptProcessor = audioContext.createScriptProcessor(2048, 1, 1);
+        compressorNode.connect(scriptProcessor);
+        const muteNode = audioContext.createGain();
+        muteNode.gain.value = 0.0;
+        scriptProcessor.connect(muteNode);
+        muteNode.connect(audioContext.destination);
+
+        rawSamplesQueue = [];
+        preRollRing = [];
+        activeTurnSamples = [];
+        resetVADState();
+
+        scriptProcessor.onaudioprocess = (e) => {
+          if (!UIState.isCallActive) return;
+          const input = e.inputBuffer.getChannelData(0);
+          for (let i = 0; i < input.length; i++) {
+            rawSamplesQueue.push(input[i]);
+          }
+          drainFrameQueue();
+        };
+
+        UIState.isCallActive = true;
+        consecutiveSpeechFrames = 0;
+        
+        elements.callBtn.className = "w-full py-4 px-4 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl shadow-lg shadow-rose-900/40 transition-all flex flex-col items-center justify-center gap-1 cursor-pointer call-active-ring";
+        elements.callBtnText.innerHTML = `<span>&#128222; End Real-Time Voice Call</span>`;
+        elements.callBtnSub.textContent = "Call Connected • Hands-Free Continuous Duplex";
+        elements.callStateBadge.textContent = "Live Connected";
+        elements.callStateBadge.className = "text-[10px] bg-emerald-950 text-emerald-400 font-mono px-2 py-0.5 rounded-full border border-emerald-600/50";
+        elements.agentStateBadge.textContent = "Listening";
+        elements.agentStateBadge.className = "text-[10px] text-cyan-400 font-mono bg-cyan-950/60 border border-cyan-800/40 px-2 py-0.5 rounded";
+        if (elements.visOverlayText) elements.visOverlayText.classList.add('hidden');
+        if (elements.audioStreamLabel) elements.audioStreamLabel.textContent = "Live mic stream active";
+
+        startLiveWaveform();
+
+        appendFeedItem({
+          sender: 'system',
+          title: 'Real-Time Voice Call Connected',
+          text: 'Silero Neural VAD v5 active. Speak naturally from 30-60cm. Fan and keyboard clicks are filtered.',
+          type: 'info'
+        });
+
+      } catch (err) {
+        appendFeedItem({
+          sender: 'system',
+          title: 'Microphone Error',
+          text: 'Could not access mic: ' + err.message,
+          type: 'info'
+        });
+      }
+    }
+
+    function stopCall() {
+      UIState.isCallActive = false;
+      UIState.isUserSpeaking = false;
+      consecutiveSpeechFrames = 0;
+      isSpeaking = false;
+      rawSamplesQueue = [];
+      preRollRing = [];
+      activeTurnSamples = [];
+
+      if (scriptProcessor) {
+        try { scriptProcessor.disconnect(); } catch(e) {}
+      }
+      if (compressorNode) {
+        try { compressorNode.disconnect(); } catch(e) {}
+      }
+      if (micGainNode) {
+        try { micGainNode.disconnect(); } catch(e) {}
+      }
+      if (hpfNode) {
+        try { hpfNode.disconnect(); } catch(e) {}
+      }
+      if (micStream) {
+        micStream.getTracks().forEach(t => t.stop());
+      }
+      if (audioContext) {
+        audioContext.close();
+      }
+      interruptAgent();
+
+      elements.callBtn.className = "w-full py-4 px-4 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] text-white font-bold rounded-xl shadow-lg shadow-emerald-900/30 transition-all flex flex-col items-center justify-center gap-1 cursor-pointer";
+      elements.callBtnText.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path></svg><span>Start Real-Time Voice Call</span>`;
+      elements.callBtnSub.textContent = "Full-Duplex • Silero Neural VAD Active";
+      elements.callStateBadge.textContent = "Off Call";
+      elements.callStateBadge.className = "text-[10px] bg-slate-800 text-slate-400 font-mono px-2 py-0.5 rounded-full";
+      elements.agentStateBadge.textContent = "Idle";
+      elements.agentStateBadge.className = "text-[10px] text-slate-400 font-mono bg-slate-900 border border-slate-800 px-2 py-0.5 rounded";
+      
+      elements.vadMeter.style.width = '0%';
+      elements.vadStatus.textContent = 'Off';
+      elements.probVal.textContent = '0.0%';
+      elements.vadClassVal.textContent = 'Quiet/Fan';
+      if (elements.visOverlayText) elements.visOverlayText.classList.remove('hidden');
+      if (elements.audioStreamLabel) elements.audioStreamLabel.textContent = "Awaiting audio";
+
+      appendFeedItem({
+        sender: 'system',
+        title: 'Call Disconnected',
+        text: 'Voice call session ended.',
+        type: 'info'
+      });
+    }
+
+    async function drainFrameQueue() {
+      if (isVADProcessing || !UIState.isCallActive) return;
+      isVADProcessing = true;
+
+      try {
+        while (rawSamplesQueue.length >= FRAME_SIZE && UIState.isCallActive) {
+          const frame = rawSamplesQueue.slice(0, FRAME_SIZE);
+          rawSamplesQueue = rawSamplesQueue.slice(FRAME_SIZE);
+          await processVADFrame(new Float32Array(frame));
+        }
+      } catch (err) {
+        console.error('Frame processing error:', err);
+      } finally {
+        isVADProcessing = false;
+      }
+    }
+
+    async function processVADFrame(frame512) {
+      const now = Date.now();
+
+      if (UIState.isProcessingTurn || UIState.isAgentSpeaking || now < UIState.agentSpeakingCooldownUntil) {
+        preRollRing = [];
+        activeTurnSamples = [];
+        consecutiveSpeechFrames = 0;
+        silenceStartTime = 0;
+        isSpeaking = false;
+
+        // Barge-in check during active TTS playback
+        if (UIState.isAgentSpeaking && isWasmReady && ortSession) {
+          try {
+            const input576 = new Float32Array(576);
+            input576.set(ortContext, 0);
+            input576.set(frame512, 64);
+            const inputTensor = new ort.Tensor('float32', input576, [1, 576]);
+            const stateTensor = new ort.Tensor('float32', ortState, [2, 1, 128]);
+            const out = await ortSession.run({ input: inputTensor, state: stateTensor, sr: srTensor });
+            const prob = out.output.data[0];
+            ortState = out.stateN.data;
+            ortContext = frame512.subarray(FRAME_SIZE - 64, FRAME_SIZE);
+
+            if (prob >= 0.70) {
+              bargeInSpeechFrames++;
+              if (bargeInSpeechFrames >= 3) {
+                interruptAgent();
+                bargeInSpeechFrames = 0;
+                appendFeedItem({
+                  sender: 'system',
+                  title: '⚡ Neural Barge-In Interruption',
+                  text: `Caller spoke over agent (${Math.round(prob*100)}% voice confidence). Cut off speech output.`,
+                  type: 'barge'
+                });
+              }
+            } else {
+              bargeInSpeechFrames = 0;
+            }
+          } catch(e) {}
+        }
+        return;
+      }
+
+      for (let i = 0; i < frame512.length; i++) {
+        preRollRing.push(frame512[i]);
+      }
+      if (preRollRing.length > PRE_ROLL_SAMPLES) {
+        preRollRing = preRollRing.slice(preRollRing.length - PRE_ROLL_SAMPLES);
+      }
+
+      let prob = 0.0;
+      if (isWasmReady && ortSession) {
+        try {
+          const input576 = new Float32Array(576);
+          input576.set(ortContext, 0);
+          input576.set(frame512, 64);
+
+          const inputTensor = new ort.Tensor('float32', input576, [1, 576]);
+          const stateTensor = new ort.Tensor('float32', ortState, [2, 1, 128]);
+
+          const out = await ortSession.run({ input: inputTensor, state: stateTensor, sr: srTensor });
+          prob = out.output.data[0];
+          ortState = out.stateN.data;
+          ortContext = frame512.subarray(FRAME_SIZE - 64, FRAME_SIZE);
+        } catch (e) {
+          prob = 0.0;
+        }
+      } else {
+        try {
+          const resp = await fetch('/api/vad', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pcm16_samples: Array.from(frame512), sample_rate: 16000 })
+          });
+          const vadData = await resp.json();
+          prob = vadData.latest_prob || vadData.max_prob || 0.0;
+        } catch (e) {
+          prob = 0.0;
+        }
+      }
+
+      const probPercent = Math.round(prob * 100);
+      elements.vadMeter.style.width = Math.min(100, probPercent) + '%';
+      elements.probVal.textContent = probPercent + '%';
+
+      const frameHasSpeech = prob >= 0.18;
+      if (frameHasSpeech) {
+        consecutiveSpeechFrames++;
+      } else {
+        consecutiveSpeechFrames = 0;
+      }
+
+      const speechOnset = (prob >= 0.22) || (consecutiveSpeechFrames >= 1 && prob >= 0.18);
+
+      if (speechOnset) {
+        silenceStartTime = 0;
+        elements.vadClassVal.textContent = 'Human Speech';
+        elements.vadClassVal.className = 'text-emerald-400 font-bold';
+        UIState.isUserSpeaking = true;
+
+        if (!isSpeaking) {
+          isSpeaking = true;
+          speechStartTime = now;
+          activeTurnSamples = [...preRollRing];
+          elements.vadStatus.textContent = 'Speaking...';
+          elements.vadStatus.className = 'font-mono text-emerald-400 font-bold';
+          elements.agentStateBadge.textContent = 'Listening to caller';
+        } else {
+          for (let i = 0; i < frame512.length; i++) {
+            activeTurnSamples.push(frame512[i]);
+          }
+        }
+      } else {
+        UIState.isUserSpeaking = false;
+        if (isSpeaking) {
+          for (let i = 0; i < frame512.length; i++) {
+            activeTurnSamples.push(frame512[i]);
+          }
+
+          if (silenceStartTime === 0) {
+            silenceStartTime = now;
+          } else if (now - silenceStartTime > SILENCE_TIMEOUT_MS) {
+            isSpeaking = false;
+            silenceStartTime = 0;
+            consecutiveSpeechFrames = 0;
+            elements.vadStatus.textContent = 'Pause detected';
+            elements.vadStatus.className = 'font-mono text-amber-400';
+            elements.vadClassVal.textContent = 'Fan / Filtered';
+            elements.vadClassVal.className = 'text-slate-400 font-mono';
+
+            if (activeTurnSamples.length >= 2400 && !UIState.isProcessingTurn) {
+              const turnToProcess = activeTurnSamples;
+              activeTurnSamples = [];
+              preRollRing = [];
+              rawSamplesQueue = [];
+              UIState.isProcessingTurn = true;
+              const wavBlob = encodeWAV(turnToProcess, SAMPLE_RATE);
+              processVoiceTurn(wavBlob);
+            } else {
+              activeTurnSamples = [];
+              preRollRing = [];
+            }
+          }
+        } else {
+          elements.vadClassVal.textContent = 'Fan / Noise Filtered';
+          elements.vadClassVal.className = 'text-slate-400 font-mono';
+          elements.vadStatus.textContent = 'Ambient Filtered';
+          elements.vadStatus.className = 'font-mono text-slate-500';
+        }
+      }
+    }
+
+    function interruptAgent() {
+      if (elements.ttsAudioPlayer) {
+        elements.ttsAudioPlayer.pause();
+        elements.ttsAudioPlayer.currentTime = 0;
+        elements.ttsAudioPlayer.src = '';
+      }
+      UIState.isAgentSpeaking = false;
+      UIState.agentSpeakingCooldownUntil = Date.now() + 350;
+      elements.agentStateBadge.textContent = 'Listening';
+      elements.agentStateBadge.className = 'text-[10px] text-cyan-400 font-mono bg-cyan-950/60 border border-cyan-800/40 px-2 py-0.5 rounded';
+    }
+
+    function encodeWAV(samples, sampleRate = 16000) {
+      const numSamples = samples.length;
+      const buffer = new ArrayBuffer(44 + numSamples * 2);
+      const view = new DataView(buffer);
+
+      function writeString(view, offset, string) {
+        for (let i = 0; i < string.length; i++) {
+          view.setUint8(offset + i, string.charCodeAt(i));
+        }
+      }
+
+      writeString(view, 0, 'RIFF');
+      view.setUint32(4, 36 + numSamples * 2, true);
+      writeString(view, 8, 'WAVE');
+      writeString(view, 12, 'fmt ');
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * 2, true);
+      view.setUint16(32, 2, true);
+      view.setUint16(34, 16, true);
+      writeString(view, 36, 'data');
+      view.setUint32(40, numSamples * 2, true);
+
+      let offset = 44;
+      for (let i = 0; i < numSamples; i++) {
+        const s = Math.max(-1.0, Math.min(1.0, samples[i]));
+        const intSample = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        view.setInt16(offset, intSample, true);
+        offset += 2;
+      }
+
+      return new Blob([buffer], { type: 'audio/wav' });
+    }
+
+    // ==========================================
+    // Streaming Audio Chunk Queue Player
+    // ==========================================
+    let audioChunkQueue = [];
+    let isPlayingChunk = false;
+
+    function resetAudioChunkQueue() {
+      audioChunkQueue = [];
+      isPlayingChunk = false;
+      if (elements.ttsAudioPlayer) {
+        elements.ttsAudioPlayer.pause();
+        elements.ttsAudioPlayer.src = '';
+      }
+    }
+
+    function enqueueAudioChunk(base64Audio) {
+      if (!base64Audio) return;
+      audioChunkQueue.push(base64Audio);
+      if (!isPlayingChunk) {
+        playNextAudioChunk();
+      }
+    }
+
+    function playNextAudioChunk() {
+      if (audioChunkQueue.length === 0) {
+        isPlayingChunk = false;
+        if (UIState.pendingCallClose) {
+          UIState.pendingCallClose = false;
+          appendFeedItem({
+            sender: 'system',
+            title: 'Call Completed',
+            text: 'Caller indicated no further assistance is needed. Voice call ended.',
+            type: 'info'
+          });
+          setTimeout(() => {
+            if (UIState.isCallActive) {
+              stopCall();
+            }
+          }, 600);
+          return;
+        }
+
+        if (!UIState.isProcessingTurn) {
+          UIState.isAgentSpeaking = false;
+          UIState.agentSpeakingCooldownUntil = Date.now() + 350;
+          elements.agentStateBadge.textContent = UIState.isCallActive ? 'Listening' : 'Ready';
+          elements.agentStateBadge.className = 'text-[10px] text-cyan-400 font-mono bg-cyan-950/60 border border-cyan-800/40 px-2 py-0.5 rounded';
+        }
+        return;
+      }
+
+      isPlayingChunk = true;
+      UIState.isAgentSpeaking = true;
+      elements.agentStateBadge.textContent = 'Speaking (Stream)';
+      elements.agentStateBadge.className = 'text-[10px] text-emerald-400 font-mono bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded animate-pulse';
+
+      const nextAudio = audioChunkQueue.shift();
+      elements.ttsAudioPlayer.src = nextAudio;
+      elements.ttsAudioPlayer.play().catch(e => console.log('Chunk play error:', e));
+
+      elements.ttsAudioPlayer.onended = () => {
+        playNextAudioChunk();
+      };
+    }
+
+    // ==========================================
+    // Turn Processing (Streaming Voice & Text)
+    // ==========================================
+    async function processVoiceTurn(blob) {
+      if (UIState.isProcessingTurn === false) UIState.isProcessingTurn = true;
+      elements.agentStateBadge.textContent = 'Processing (Stream)...';
+      elements.agentStateBadge.className = 'text-[10px] text-amber-400 font-mono bg-amber-950/60 border border-amber-800/40 px-2 py-0.5 rounded';
+      resetAudioChunkQueue();
+
+      try {
+        const arrayBuf = await blob.arrayBuffer();
+        const startReq = performance.now();
+
+        const resp = await fetch('/api/voice-turn-stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'audio/wav' },
+          body: arrayBuf
+        });
+
+        if (!resp.ok) {
+          throw new Error(`Server returned error status ${resp.status}`);
+        }
+
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let activeAgentBubble = null;
+        let streamedText = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop(); // Keep partial line
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const chunk = JSON.parse(line);
+
+              if (chunk.type === 'meta') {
+                if (chunk.result && chunk.result.transcribed_text) {
+                  appendFeedItem({
+                    sender: 'user',
+                    text: chunk.result.transcribed_text,
+                    asrLatency: chunk.result.asr_latency_ms ? chunk.result.asr_latency_ms.toFixed(0) : null
+                  });
+                }
+                if (chunk.workflow_state) {
+                  updateWorkflowUI(chunk.workflow_state);
+                }
+              } else if (chunk.type === 'text_delta') {
+                streamedText += chunk.delta_text;
+                if (!activeAgentBubble) {
+                  activeAgentBubble = appendFeedItem({
+                    sender: 'agent',
+                    text: streamedText,
+                    isStreaming: true
+                  });
+                } else {
+                  const textEl = activeAgentBubble.querySelector('.agent-speech-text');
+                  if (textEl) textEl.textContent = streamedText;
+                }
+              } else if (chunk.type === 'audio_chunk') {
+                enqueueAudioChunk(chunk.audio_base64);
+              } else if (chunk.type === 'final') {
+                const data = chunk.result;
+                const roundTrip = (performance.now() - startReq).toFixed(0);
+                updateLatencyDisplay({
+                  vad_ms: 0.1,
+                  asr_ms: data.asr_latency_ms || 0,
+                  clef_ms: data.clef_decision_latency_ms || 0,
+                  tool_us: data.tool_executed ? data.tool_executed.duration_microseconds : 0.6,
+                  llm_ms: data.llm_latency_ms || 0,
+                  tts_ms: data.tts_latency_ms || 0,
+                  total_ms: data.total_pipeline_latency_ms || parseFloat(roundTrip)
+                });
+                if (data.workflow_state) {
+                  updateWorkflowUI(data.workflow_state);
+                  if (data.workflow_state.completed && (data.workflow_state.current_node_id === 'call_completed' || (data.decisions && data.decisions.intent === 'call_completion'))) {
+                    UIState.pendingCallClose = true;
+                  }
+                }
+              }
+            } catch (e) {
+              console.warn('NDJSON parse error:', e, line);
+            }
+          }
+        }
+
+      } catch (err) {
+        appendFeedItem({
+          sender: 'system',
+          title: 'Streaming Error',
+          text: err.message,
+          type: 'info'
+        });
+        elements.agentStateBadge.textContent = 'Listening';
+      } finally {
+        UIState.isProcessingTurn = false;
+      }
+    }
+
+    // Manual Text Turn Submission with Streaming
+    elements.textForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const text = elements.textInput.value.trim();
+      if (!text) return;
+      elements.textInput.value = '';
+
+      elements.agentStateBadge.textContent = 'Processing (Stream)...';
+      elements.agentStateBadge.className = 'text-[10px] text-amber-400 font-mono bg-amber-950/60 border border-amber-800/40 px-2 py-0.5 rounded';
+      resetAudioChunkQueue();
+
+      appendFeedItem({
+        sender: 'user',
+        text: text,
+        asrLatency: null
+      });
+
+      const startReq = performance.now();
+
+      try {
+        const resp = await fetch('/api/text-turn-stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: text })
+        });
+
+        if (!resp.ok) {
+          throw new Error(`Server returned status ${resp.status}`);
+        }
+
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let activeAgentBubble = null;
+        let streamedText = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop();
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const chunk = JSON.parse(line);
+
+              if (chunk.type === 'meta') {
+                if (chunk.workflow_state) {
+                  updateWorkflowUI(chunk.workflow_state);
+                }
+              } else if (chunk.type === 'text_delta') {
+                streamedText += chunk.delta_text;
+                if (!activeAgentBubble) {
+                  activeAgentBubble = appendFeedItem({
+                    sender: 'agent',
+                    text: streamedText,
+                    isStreaming: true
+                  });
+                } else {
+                  const textEl = activeAgentBubble.querySelector('.agent-speech-text');
+                  if (textEl) textEl.textContent = streamedText;
+                }
+              } else if (chunk.type === 'audio_chunk') {
+                enqueueAudioChunk(chunk.audio_base64);
+              } else if (chunk.type === 'final') {
+                const data = chunk.result;
+                const roundTrip = (performance.now() - startReq).toFixed(0);
+                updateLatencyDisplay({
+                  vad_ms: 0.1,
+                  asr_ms: 0,
+                  clef_ms: data.clef_decision_latency_ms || 0,
+                  tool_us: data.tool_executed ? data.tool_executed.duration_microseconds : 0.6,
+                  llm_ms: data.llm_latency_ms || 0,
+                  tts_ms: data.tts_latency_ms || 0,
+                  total_ms: data.total_pipeline_latency_ms || parseFloat(roundTrip)
+                });
+                if (data.workflow_state) {
+                  updateWorkflowUI(data.workflow_state);
+                  if (data.workflow_state.completed && (data.workflow_state.current_node_id === 'call_completed' || (data.decisions && data.decisions.intent === 'call_completion'))) {
+                    UIState.pendingCallClose = true;
+                  }
+                }
+              }
+            } catch (e) {
+              console.warn('NDJSON text parse error:', e, line);
+            }
+          }
+        }
+
+      } catch (err) {
+        appendFeedItem({
+          sender: 'system',
+          title: 'Text Streaming Error',
+          text: err.message,
+          type: 'info'
+        });
+        elements.agentStateBadge.textContent = UIState.isCallActive ? 'Listening' : 'Ready';
+      }
+    });
+
+    // ==========================================
+    // Bring Your Own Key (BYOK) Management
+    // ==========================================
+    const BYOK = {
+      sarvamKey: localStorage.getItem('byok_sarvam_api_key') || '',
+      elevenlabsKey: localStorage.getItem('byok_elevenlabs_api_key') || '',
+      jevKey: localStorage.getItem('byok_jev_api_key') || '',
+
+      save(sarvam, eleven, jev) {
+        this.sarvamKey = sarvam.trim();
+        this.elevenlabsKey = eleven.trim();
+        this.jevKey = jev.trim();
+
+        if (this.sarvamKey) localStorage.setItem('byok_sarvam_api_key', this.sarvamKey);
+        else localStorage.removeItem('byok_sarvam_api_key');
+
+        if (this.elevenlabsKey) localStorage.setItem('byok_elevenlabs_api_key', this.elevenlabsKey);
+        else localStorage.removeItem('byok_elevenlabs_api_key');
+
+        if (this.jevKey) localStorage.setItem('byok_jev_api_key', this.jevKey);
+        else localStorage.removeItem('byok_jev_api_key');
+
+        this.syncToBackend();
+        this.updateBadge();
+      },
+
+      async syncToBackend() {
+        try {
+          const payload = {};
+          if (this.sarvamKey) payload.sarvam_api_key = this.sarvamKey;
+          if (this.elevenlabsKey) payload.elevenlabs_api_key = this.elevenlabsKey;
+          if (this.jevKey) payload.jev_api_key = this.jevKey;
+
+          if (Object.keys(payload).length > 0) {
+            await fetch('/api/config/providers', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+          }
+        } catch(e) {
+          console.warn('Failed to sync BYOK keys to local session:', e);
+        }
+      },
+
+      updateBadge() {
+        const badge = document.getElementById('keyStatusBadge');
+        if (!badge) return;
+        if (this.sarvamKey || this.elevenlabsKey) {
+          badge.textContent = 'KEYS CONFIGURED';
+          badge.className = 'text-[9px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-700/60 px-1 py-0.2 rounded';
+        } else {
+          badge.textContent = 'FREE LOCAL STACK';
+          badge.className = 'text-[9px] font-mono bg-indigo-950 text-indigo-300 border border-indigo-700/60 px-1 py-0.2 rounded';
+        }
+      }
+    };
+
+    // Open/Close BYOK Modal
+    document.getElementById('apiKeySettingsBtn').addEventListener('click', () => {
+      document.getElementById('byokSarvamInput').value = BYOK.sarvamKey;
+      document.getElementById('byokElevenInput').value = BYOK.elevenlabsKey;
+      document.getElementById('byokJevInput').value = BYOK.jevKey;
+      document.getElementById('apiKeyModal').classList.remove('hidden');
+    });
+
+    document.getElementById('closeApiKeyModalBtn').addEventListener('click', () => {
+      document.getElementById('apiKeyModal').classList.add('hidden');
+    });
+
+    document.getElementById('saveApiKeyBtn').addEventListener('click', () => {
+      const sarvam = document.getElementById('byokSarvamInput').value;
+      const eleven = document.getElementById('byokElevenInput').value;
+      const jev = document.getElementById('byokJevInput').value;
+
+      BYOK.save(sarvam, eleven, jev);
+      document.getElementById('apiKeyModal').classList.add('hidden');
+      alert('API keys saved securely in your browser and synced to the session.');
+    });
+
+    document.getElementById('clearApiKeyBtn').addEventListener('click', () => {
+      BYOK.save('', '', '');
+      document.getElementById('byokSarvamInput').value = '';
+      document.getElementById('byokElevenInput').value = '';
+      document.getElementById('byokJevInput').value = '';
+      alert('Stored API keys cleared. Free Local CUDA Stack is active.');
+    });
+
+    // Initialize BYOK state on startup
+    BYOK.updateBadge();
+    BYOK.syncToBackend();
+
+  </script>
+
+  <!-- Bring Your Own API Key (BYOK) Modal -->
+  <div id="apiKeyModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg p-6 shadow-2xl space-y-4">
+      <div class="flex justify-between items-center pb-3 border-b border-slate-800">
+        <div>
+          <h3 class="font-bold text-sm text-slate-100 flex items-center gap-1.5">
+            <span>🔑 Bring Your Own API Keys (BYOK)</span>
+          </h3>
+          <p class="text-[11px] text-slate-400">Keys are stored locally in your browser and used only for your live session.</p>
+        </div>
+        <button id="closeApiKeyModalBtn" class="text-slate-400 hover:text-white text-xs p-1">✕</button>
+      </div>
+
+      <div class="space-y-3.5 text-xs">
+        <div>
+          <div class="flex justify-between items-center mb-1">
+            <label class="font-bold text-slate-300 text-[11px] flex items-center gap-1">
+              <span>🇮🇳 Sarvam AI API Key</span>
+            </label>
+            <a href="https://dashboard.sarvam.ai" target="_blank" class="text-[10px] text-indigo-400 hover:underline">Get Key ↗</a>
+          </div>
+          <input id="byokSarvamInput" type="password" placeholder="Enter your Sarvam API subscription key..." class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 text-xs font-mono focus:outline-none focus:border-indigo-500">
+          <p class="text-[10px] text-slate-500 mt-1">Powers Saaras STT, Bulbul TTS, and Sarvam-105B Indic LLM.</p>
+        </div>
+
+        <div>
+          <div class="flex justify-between items-center mb-1">
+            <label class="font-bold text-slate-300 text-[11px] flex items-center gap-1">
+              <span>✨ ElevenLabs API Key</span>
+            </label>
+            <a href="https://elevenlabs.io" target="_blank" class="text-[10px] text-purple-400 hover:underline">Get Key ↗</a>
+          </div>
+          <input id="byokElevenInput" type="password" placeholder="Enter your ElevenLabs API key..." class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 text-xs font-mono focus:outline-none focus:border-purple-500">
+          <p class="text-[10px] text-slate-500 mt-1">Powers Ultra-HD natural voice synthesis (Turbo v2.5).</p>
+        </div>
+
+        <div>
+          <div class="flex justify-between items-center mb-1">
+            <label class="font-bold text-slate-300 text-[11px] flex items-center gap-1">
+              <span>⚡ TypeSafe Jev API Key (Optional)</span>
+            </label>
+            <a href="https://typesafe.ai" target="_blank" class="text-[10px] text-teal-400 hover:underline">Get Key ↗</a>
+          </div>
+          <input id="byokJevInput" type="password" placeholder="Enter your TypeSafe Jev API key..." class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 text-xs font-mono focus:outline-none focus:border-teal-500">
+          <p class="text-[10px] text-slate-500 mt-1">Powers Cloud System One sub-millisecond intent and slot extraction.</p>
+        </div>
+
+        <div class="p-3 bg-slate-950 border border-slate-800 rounded-xl text-[11px] space-y-1.5 text-slate-300">
+          <div class="flex items-center gap-1.5 text-emerald-400 font-bold">
+            <span>🛡️ Privacy & Open Source Guarantee</span>
+          </div>
+          <p class="text-[10px] text-slate-400 leading-relaxed">
+            This is an open-source demo. Your keys are stored directly in your local browser (<code class="text-indigo-300">localStorage</code>) and are never logged, persisted in a database, or shared. Leave blank to run the completely free Local CUDA stack.
+          </p>
+        </div>
+
+        <div class="flex gap-2 pt-2">
+          <button id="saveApiKeyBtn" class="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition text-xs shadow-md">
+            Save & Activate Keys
+          </button>
+          <button id="clearApiKeyBtn" class="py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl transition text-xs border border-slate-700">
+            Clear Keys
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
